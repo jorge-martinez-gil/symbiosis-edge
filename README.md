@@ -34,7 +34,7 @@ This transforms drift adaptation from a *query selection* problem into a **cost-
 
 ### Cost-Aware Routing Policy
 
-The routing policy π(xₜ) ∈ {E, O, H} minimizes total cost over a sliding window:
+The routing policy minimizes total cost over a sliding window:
 
 $$J = \sum_{t \in W} \bigl[\mathbb{1}(\hat{y}_t \neq y_t) \cdot \lambda_{\text{err}} + C_{\pi(x_t)}\bigr]$$
 
