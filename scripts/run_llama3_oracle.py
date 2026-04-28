@@ -1,22 +1,21 @@
-# paper_plots_multi_dataset_full_chatbase_dev.py
-# Replaces the "Oracle" with a real Chatbase chatbot call, plus a DEV_MODE switch
+# run_llama3_oracle.py
+# Replaces the "Oracle" with a direct Llama 3 call via the Groq API, plus a DEV_MODE switch
 # to reduce cost during development (fewer seeds, shorter stream, fewer datasets).
 #
 # Requirements:
 #   pip install aiohttp numpy pandas matplotlib
 #
 # Secrets (do NOT hardcode):
-#   export CHATBASE_API_KEY="..."
-#   export CHATBASE_CHATBOT_ID="..."
+#   export GROQ_API_KEY="..."
 #
 # DEV_MODE behavior:
 # - seeds: 2 (instead of 10)
-# - n: 300 (instead of 1200)
-# - window_w: 80 (instead of 200)
+# - n: 1500 (instead of 1200)
+# - window_w: 50 (instead of 200)
 # - datasets: SYNTHETIC only (instead of SYNTHETIC+SECOM+APS)
 #
 # Chatbot output contract:
-# The chatbot must return STRICT JSON only: {"label": <int>} where label in [0, k_classes-1].
+# The model must return STRICT JSON only: {"label": <int>} where label in [0, k_classes-1].
 
 from __future__ import annotations
 
@@ -215,7 +214,7 @@ def _symbiosis_thresholds(window_u: np.ndarray, *, b_oracle: float, b_human: flo
 
 
 # ============================
-# Chatbase oracle (real chatbot)
+# Llama 3 oracle (via Groq API)
 # ============================
 
 @dataclass(frozen=True)
@@ -224,36 +223,42 @@ class OracleReply:
     label: Optional[int]
 
 
-class ChatbaseOracle:
+class LlamaOracle:
     def __init__(
         self,
         *,
         api_key: Optional[str] = None,
-        chatbot_id: Optional[str] = None,
-        api_url: str = "https://www.chatbase.co/api/v1/chat",
+        api_url: str = "https://api.groq.com/openai/v1/chat/completions",
+        model: str = "llama3-70b-8192",
         timeout_s: float = 30.0,
         max_retries: int = 3,
         concurrency: int = 6,
     ) -> None:
-        self.api_key = api_key or os.environ.get("CHATBASE_API_KEY", "d1a408c0-5e75-40ca-99e5-424e830d26ed")
-        self.chatbot_id = chatbot_id or os.environ.get("CHATBASE_CHATBOT_ID", "MY7q1PRbIMOwFyc7pYCch")
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         self.api_url = api_url
+        self.model = model
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self._sem = asyncio.Semaphore(concurrency)
         self._cache: Dict[str, OracleReply] = {}
 
-        if not self.api_key or not self.chatbot_id:
-            raise ValueError("Missing CHATBASE_API_KEY and/or CHATBASE_CHATBOT_ID environment variables.")
+        if not self.api_key:
+            raise ValueError("Missing GROQ_API_KEY environment variable.")
 
     @staticmethod
     def _extract_text(data: object) -> Optional[str]:
         if not isinstance(data, dict):
             return None
-        for key in ["text", "message", "output", "response"]:
-            v = data.get(key)
-            if isinstance(v, str) and v.strip():
-                return v
+        # OpenAI-compatible response: choices[0].message.content
+        choices = data.get("choices")
+        if isinstance(choices, list) and len(choices) > 0:
+            first = choices[0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if isinstance(content, str) and content.strip():
+                        return content
         return None
 
     async def label(self, *, cache_key: str, item_text: str, k_classes: int) -> OracleReply:
@@ -268,12 +273,11 @@ class ChatbaseOracle:
         )
 
         payload = {
+            "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": item_text},
             ],
-            "chatbotId": self.chatbot_id,
-            "stream": False,
         }
 
         headers = {
@@ -292,7 +296,7 @@ class ChatbaseOracle:
                             text_body = await resp.text()
 
                             if resp.status < 200 or resp.status >= 300:
-                                raise RuntimeError(f"Chatbase HTTP {resp.status}: {text_body[:500]}")
+                                raise RuntimeError(f"Groq HTTP {resp.status}: {text_body[:500]}")
 
                             model_text = None
                             try:
@@ -321,7 +325,7 @@ class ChatbaseOracle:
                     last_err = e
                     await asyncio.sleep(0.4 * (attempt + 1))
 
-        raise RuntimeError(f"Chatbase oracle failed after retries: {last_err}")
+        raise RuntimeError(f"Llama oracle failed after retries: {last_err}")
 
 
 def _sample_cache_key(*, dataset: str, t: int, k_classes: int) -> str:
@@ -341,7 +345,7 @@ def _make_item_text(*, dataset: str, t: int, k_classes: int) -> str:
 
 
 # ============================
-# Stream simulator (with chatbot oracle)
+# Stream simulator (with Llama oracle)
 # ============================
 
 @dataclass(frozen=True)
@@ -380,8 +384,8 @@ async def simulate_one_run(
     dataset: str,
     seed: int,
     params: SimParams,
-    oracle: ChatbaseOracle,
-    use_chatbase_oracle: bool = True,
+    oracle: LlamaOracle,
+    use_llama_oracle: bool = True,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     n = params.n
@@ -444,7 +448,7 @@ async def simulate_one_run(
             # Online adaptation
             if method == "SAL":
                 if q_oracle:
-                    if use_chatbase_oracle:
+                    if use_llama_oracle:
                         cache_key = _sample_cache_key(dataset=dataset, t=t, k_classes=k)
                         item_text = _make_item_text(dataset=dataset, t=t, k_classes=k)
                         reply = await oracle.label(cache_key=cache_key, item_text=item_text, k_classes=k)
@@ -457,7 +461,7 @@ async def simulate_one_run(
                 if q_human:
                     state[method] = float(np.clip(state[method] + params.lr_human, 0.05, 0.999))
                 elif q_oracle:
-                    if use_chatbase_oracle:
+                    if use_llama_oracle:
                         cache_key = _sample_cache_key(dataset=dataset, t=t, k_classes=k)
                         item_text = _make_item_text(dataset=dataset, t=t, k_classes=k)
                         reply = await oracle.label(cache_key=cache_key, item_text=item_text, k_classes=k)
@@ -488,17 +492,17 @@ async def simulate_datasets(
     datasets: Sequence[DatasetConfig],
     seeds: int,
     params_by_dataset: Dict[str, SimParams],
-    use_chatbase_oracle: bool = True,
+    use_llama_oracle: bool = True,
     oracle_concurrency: int = 6,
 ) -> pd.DataFrame:
-    oracle = ChatbaseOracle(concurrency=oracle_concurrency) if use_chatbase_oracle else ChatbaseOracle(concurrency=1)
+    oracle = LlamaOracle(concurrency=oracle_concurrency) if use_llama_oracle else LlamaOracle(concurrency=1)
 
     tasks: List[asyncio.Task[pd.DataFrame]] = []
     for ds in datasets:
         p = params_by_dataset[ds.name]
         for s in range(seeds):
             tasks.append(asyncio.create_task(
-                simulate_one_run(dataset=ds.name, seed=s, params=p, oracle=oracle, use_chatbase_oracle=use_chatbase_oracle)
+                simulate_one_run(dataset=ds.name, seed=s, params=p, oracle=oracle, use_llama_oracle=use_llama_oracle)
             ))
 
     frames = await asyncio.gather(*tasks)
@@ -789,7 +793,7 @@ async def main() -> None:
     }
 
     # Oracle usage toggle
-    USE_CHATBASE_ORACLE = True
+    USE_LLAMA_ORACLE = True
 
     # Dev cost controls
     SEEDS = 2 if DEV_MODE else 10
@@ -806,7 +810,7 @@ async def main() -> None:
         datasets=DATASETS,
         seeds=SEEDS,
         params_by_dataset=params_by_ds,
-        use_chatbase_oracle=USE_CHATBASE_ORACLE,
+        use_llama_oracle=USE_LLAMA_ORACLE,
         oracle_concurrency=ORACLE_CONCURRENCY,
     )
 

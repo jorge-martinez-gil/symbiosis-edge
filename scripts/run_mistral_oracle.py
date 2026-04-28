@@ -1,4 +1,4 @@
-# with_mistral.py
+# run_mistral_oracle.py
 # Replaces the "Oracle" with a direct Mistral call via the Mistral AI API, plus a DEV_MODE switch
 # to reduce cost during development (fewer seeds, shorter stream, fewer datasets).
 #

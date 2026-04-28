@@ -1,5 +1,5 @@
-# paper_plots_multi_dataset_full_with_stronger_adwin.py
-# End-to-end: simulate, plot figures, and generate ONE LaTeX table PER dataset.
+# run_without_adwin.py
+# End-to-end: simulate (paper-consistent), plot figures, and generate ONE LaTeX table PER dataset.
 #
 # Methods:
 #   - Static
@@ -7,28 +7,31 @@
 #   - ADWIN-SAL
 #   - Symbiosis
 #
-# Key changes in this version:
-# - Stronger ADWIN-SAL:
-#     * detector monitors smoothed uncertainty instead of binary correctness
-#     * larger post-alarm budget window
-#     * temporary boosted query budget after alarm
-#     * temporary adaptation boost after alarm
-#     * more cumulative queries than the previous ADWIN version
-# - Cumulative-query subplot is taller for better visibility
-# - Lower legend includes only Symbiosis query lines:
-#     * S-E: total
-#     * S-E: oracle
-#     * S-E: human
-# - Static, SAL, and ADWIN-SAL are omitted from the lower legend
-# - Symbiosis is red in the cumulative-query subplot
-# - X-axis is fixed to 0..2000
+# Tables: rows = Static, SAL, ADWIN-SAL, Symbiosis
+# Columns:
+#   - Num. queries
+#   - Cost per query
+#   - Total cost
+#   - Mean accuracy (POST-DRIFT only)
+#   - ROI (accuracy lift per cost, versus Static; POST-DRIFT only)
 #
 # Notes:
-# - Drift time is used only by the environment to change difficulty.
+# - Drift time is used only inside the environment to change difficulty.
 # - Uncertainty score u_t = entropy(p) + alpha*(1 - margin(p))
 # - SAL queries via sliding-window quantile thresholding.
-# - ADWIN-SAL uses a stronger drift-aware budgeted policy.
+# - ADWIN-SAL opens a temporary query window after detector alarms, then uses uncertainty thresholding.
 # - Symbiosis routes via two quantile thresholds to satisfy oracle/human budgets.
+#
+# IMPORTANT:
+# - TIME-SERIES PLOTS use the FULL timeline and start at t=0.
+# - TABLES and COST-vs-ACCURACY scatter remain POST-DRIFT only.
+# - Symbiosis is shown in RED in the cumulative-query subplot.
+# - Symbiosis legend labels are: S-E: total, S-E: oracle, S-E: human
+# - X-axis is fixed to 0..2000.
+# - Oracle and human are IMPERFECT annotators.
+#
+# This script uses a lightweight ADWIN-like detector over online correctness.
+# It is intended as a stronger drift-aware baseline inside this simulator.
 
 from __future__ import annotations
 
@@ -42,7 +45,7 @@ import matplotlib.pyplot as plt
 
 
 # ============================
-# Styling
+# Styling (paper-friendly)
 # ============================
 
 def set_paper_style(*, use_tex: bool = False, base_font: int = 9) -> None:
@@ -203,7 +206,7 @@ def _apply_supervision_update(
 
 
 # ============================
-# Uncertainty score
+# Uncertainty score: entropy + margin
 # ============================
 
 def _probs_from_pcorrect(p_correct: float, k: int) -> np.ndarray:
@@ -250,14 +253,14 @@ def _symbiosis_thresholds(window_u: np.ndarray, *, b_oracle: float, b_human: flo
 
 
 # ============================
-# Stronger ADWIN-like detector
+# Simple ADWIN-like detector
 # ============================
 
 @dataclass
 class SimpleADWIN:
-    max_window: int = 300
-    min_window: int = 30
-    delta: float = 0.08
+    max_window: int = 200
+    min_window: int = 40
+    delta: float = 0.02
     values: List[float] = field(default_factory=list)
 
     def update(self, x: float) -> bool:
@@ -270,7 +273,7 @@ class SimpleADWIN:
             return False
 
         detected = False
-        half_min = max(5, self.min_window // 2)
+        half_min = max(2, self.min_window // 2)
 
         for cut in range(half_min, n - half_min + 1):
             left = np.asarray(self.values[:cut], dtype=float)
@@ -281,7 +284,6 @@ class SimpleADWIN:
 
             gap = abs(left.mean() - right.mean())
             eps = np.sqrt(2.0 * np.log(2.0 / self.delta) * (1.0 / left.size + 1.0 / right.size))
-
             if gap > eps:
                 detected = True
                 break
@@ -294,7 +296,7 @@ class SimpleADWIN:
 
 
 # ============================
-# Simulator
+# Simulator (paper-consistent)
 # ============================
 
 @dataclass(frozen=True)
@@ -304,46 +306,44 @@ class SimParams:
     drift_t: int = 500
     window_w: int = 200
 
-    # Budgets
+    # Budgets (fractions)
     b_sal: float = 0.12
-    b_adwin_base: float = 0.10
-    b_adwin_alarm: float = 0.28
+    b_adwin: float = 0.12
     b_oracle: float = 0.12
     b_human: float = 0.05
 
     # ADWIN baseline
-    adwin_delta: float = 0.08
-    adwin_max_window: int = 300
-    adwin_min_window: int = 30
-    adwin_alarm_window: int = 220
-    adwin_lr_boost: float = 0.004
+    adwin_delta: float = 0.02
+    adwin_max_window: int = 200
+    adwin_min_window: int = 40
+    adwin_cooldown: int = 80
 
-    # Uncertainty mix
+    # uncertainty mix weight
     alpha_margin: float = 0.6
 
-    # Edge pseudo-update gate
+    # edge pseudo-update gate on uncertainty
     u_floor: float = 0.0
 
-    # Learning rates for correct supervision
+    # learning rates for correct supervision
     lr_edge: float = 0.001
     lr_oracle: float = 0.010
     lr_human: float = 0.016
 
-    # Penalty when supervision is wrong
+    # penalty when supervision is wrong
     lr_oracle_wrong: float = 0.012
     lr_human_wrong: float = 0.010
 
-    # Supervision reliability
+    # supervision reliability
     oracle_acc: float = 0.95
     human_acc: float = 0.99
 
-    # Environment targets
+    # environment targets
     pre_acc_static: float = 0.92
     post_acc_static: float = 0.60
     pre_acc_sal: float = 0.93
     post_acc_sal: float = 0.55
     pre_acc_adwin: float = 0.93
-    post_acc_adwin: float = 0.60
+    post_acc_adwin: float = 0.58
     pre_acc_sym: float = 0.93
     post_acc_sym: float = 0.55
 
@@ -372,9 +372,7 @@ def simulate_one_run(*, dataset: str, seed: int, params: SimParams) -> pd.DataFr
         min_window=params.adwin_min_window,
         delta=params.adwin_delta,
     )
-    adwin_alarm_until = -1
-    adwin_u_ema = None
-    adwin_ema_alpha = 0.12
+    adwin_budget_until = -1
 
     for t in range(n):
         is_post = t >= params.drift_t
@@ -409,13 +407,8 @@ def simulate_one_run(*, dataset: str, seed: int, params: SimParams) -> pd.DataFr
 
             elif method == "ADWIN-SAL":
                 window = np.array(u_hist[method][-params.window_w:], dtype=float)
-                if t <= adwin_alarm_until:
-                    b_now = params.b_adwin_alarm
-                else:
-                    b_now = params.b_adwin_base
-
-                tau = _quantile_threshold(window, b_now)
-                if u > tau:
+                tau = _quantile_threshold(window, params.b_adwin)
+                if t <= adwin_budget_until and u > tau:
                     q_oracle = True
 
             elif method == "Symbiosis-Edge":
@@ -438,14 +431,9 @@ def simulate_one_run(*, dataset: str, seed: int, params: SimParams) -> pd.DataFr
                 y_pred = int(rng.choice(other))
 
             if method == "ADWIN-SAL":
-                if adwin_u_ema is None:
-                    adwin_u_ema = u
-                else:
-                    adwin_u_ema = (1.0 - adwin_ema_alpha) * adwin_u_ema + adwin_ema_alpha * u
-
-                changed = adwin.update(adwin_u_ema)
+                changed = adwin.update(1.0 if pred_correct else 0.0)
                 if changed:
-                    adwin_alarm_until = max(adwin_alarm_until, t + params.adwin_alarm_window)
+                    adwin_budget_until = t + params.adwin_cooldown
 
             if method == "SAL":
                 if q_oracle:
@@ -460,25 +448,14 @@ def simulate_one_run(*, dataset: str, seed: int, params: SimParams) -> pd.DataFr
 
             elif method == "ADWIN-SAL":
                 if q_oracle:
-                    lr_adwin = params.lr_oracle
-                    if t <= adwin_alarm_until:
-                        lr_adwin = params.lr_oracle + params.adwin_lr_boost
-
                     state[method], oc = _apply_supervision_update(
                         state[method],
                         rng=rng,
                         annotator_acc=params.oracle_acc,
-                        lr_correct=lr_adwin,
+                        lr_correct=params.lr_oracle,
                         lr_wrong=params.lr_oracle_wrong,
                     )
                     oracle_correct = bool(oc)
-                else:
-                    if is_post and t <= adwin_alarm_until:
-                        state[method] = float(np.clip(
-                            state[method] + 0.5 * params.lr_edge,
-                            0.05,
-                            0.999,
-                        ))
 
             elif method == "Symbiosis-Edge":
                 if q_human:
@@ -545,7 +522,7 @@ def plot_accuracy_with_query_count_panel_ci(
     drift_t: Optional[int] = None,
     title: str = "",
     ci: float = 0.95,
-    fig_size: Tuple[float, float] = (6.9, 3.9),
+    fig_size: Tuple[float, float] = (6.8, 3.35),
     acc_ylim: Optional[Tuple[float, float]] = None,
     acc_collapse_rule: str = "last",
     symbiosis_name: str = "Symbiosis-Edge",
@@ -559,8 +536,7 @@ def plot_accuracy_with_query_count_panel_ci(
     fig = plt.figure(figsize=fig_size)
     fig.set_constrained_layout(False)
 
-    # Larger lower subplot
-    gs = gridspec.GridSpec(2, 1, height_ratios=[3.0, 1.35], hspace=0.06)
+    gs = gridspec.GridSpec(2, 1, height_ratios=[3.6, 0.95], hspace=0.05)
     ax_top = fig.add_subplot(gs[0])
     ax_bot = fig.add_subplot(gs[1], sharex=ax_top)
 
@@ -572,7 +548,7 @@ def plot_accuracy_with_query_count_panel_ci(
     acc_lo_all: List[np.ndarray] = []
     acc_hi_all: List[np.ndarray] = []
 
-    # Top: rolling accuracy
+    # Top: accuracy over full timeline
     for method, g_method in df.groupby(schema.method):
         method = str(method)
         per_run = []
@@ -640,14 +616,19 @@ def plot_accuracy_with_query_count_panel_ci(
         borderaxespad=0.2,
     )
 
-    # Bottom: cumulative queries
+    # Bottom: cumulative query counts over full timeline
     plotted_means: List[np.ndarray] = []
-    sym_handles: List[plt.Line2D] = []
-    sym_labels: List[str] = []
+    handles: List[plt.Line2D] = []
+    labels: List[str] = []
 
     t_support = np.arange(0, x_max + 1, dtype=int)
+    zeros = np.zeros_like(t_support, dtype=float)
+    h0 = ax_bot.plot(t_support, zeros, color=method_to_color.get("Static", None), linestyle="-")[0]
+    handles.append(h0)
+    labels.append("Static")
+    plotted_means.append(zeros)
 
-    def _plot_single_query_method(method_name: str, label: str, show_in_legend: bool) -> None:
+    def _plot_single_query_method(method_name: str, label: str) -> None:
         df_m = df[df[schema.method].astype(str) == method_name].copy()
         if df_m.empty:
             return
@@ -672,18 +653,14 @@ def plot_accuracy_with_query_count_panel_ci(
         c = method_to_color.get(method_name, None)
         h = ax_bot.plot(t_all, mean, color=c, linestyle="-")[0]
         ax_bot.fill_between(t_all, lo, hi, alpha=0.16, linewidth=0, color=c)
-
-        if show_in_legend:
-            sym_handles.append(h)
-            sym_labels.append(label)
+        handles.append(h)
+        labels.append(label)
         plotted_means.append(mean)
 
-    # These lines are shown but not included in lower legend
-    _plot_single_query_method("Static", "Static", show_in_legend=False)
-    _plot_single_query_method("SAL", "SAL", show_in_legend=False)
-    _plot_single_query_method("ADWIN-SAL", "ADWIN-SAL", show_in_legend=False)
+    _plot_single_query_method("SAL", "SAL")
+    _plot_single_query_method("ADWIN-SAL", "ADWIN-SAL")
 
-    # Symbiosis lines, included in lower legend
+    # Symbiosis oracle + human + total
     df_sym = df[df[schema.method].astype(str) == symbiosis_name].copy()
     if not df_sym.empty:
         per_run_total = []
@@ -708,8 +685,8 @@ def plot_accuracy_with_query_count_panel_ci(
         mean, lo, hi = _mean_ci(mat, ci=ci)
         h_total = ax_bot.plot(t_all, mean, color=symbiosis_red, linestyle="-")[0]
         ax_bot.fill_between(t_all, lo, hi, alpha=0.12, linewidth=0, color=symbiosis_red)
-        sym_handles.append(h_total)
-        sym_labels.append("S-E: total")
+        handles.append(h_total)
+        labels.append("S-E: total")
         plotted_means.append(mean)
 
         def _plot_sym(col: str, linestyle: str, lab: str) -> None:
@@ -730,8 +707,8 @@ def plot_accuracy_with_query_count_panel_ci(
             mean_local, lo_local, hi_local = _mean_ci(mat_local, ci=ci)
             h = ax_bot.plot(t_all_local, mean_local, color=symbiosis_red, linestyle=linestyle)[0]
             ax_bot.fill_between(t_all_local, lo_local, hi_local, alpha=0.10, linewidth=0, color=symbiosis_red)
-            sym_handles.append(h)
-            sym_labels.append(lab)
+            handles.append(h)
+            labels.append(lab)
             plotted_means.append(mean_local)
 
         _plot_sym(schema.q_oracle, ":", "S-E: oracle")
@@ -748,30 +725,29 @@ def plot_accuracy_with_query_count_panel_ci(
     else:
         ax_bot.set_ylim(*query_ylim)
 
-    if sym_handles:
-        ax_bot.legend(
-            handles=sym_handles,
-            labels=sym_labels,
-            frameon=False,
-            ncol=1,
-            loc="upper left",
-            bbox_to_anchor=(0.015, 0.98),
-            borderaxespad=0.0,
-            columnspacing=1.0,
-            handlelength=2.2,
-            handletextpad=0.5,
-        )
+    ax_bot.legend(
+        handles=handles,
+        labels=labels,
+        frameon=False,
+        ncol=2,
+        loc="upper left",
+        bbox_to_anchor=(0.015, 0.98),
+        borderaxespad=0.0,
+        columnspacing=1.0,
+        handlelength=2.2,
+        handletextpad=0.5,
+    )
 
     ax_top.locator_params(axis="y", nbins=4)
-    ax_bot.locator_params(axis="y", nbins=4)
+    ax_bot.locator_params(axis="y", nbins=3)
     ax_bot.locator_params(axis="x", nbins=6)
 
-    fig.subplots_adjust(left=0.10, right=0.99, top=0.92, bottom=0.14)
+    fig.subplots_adjust(left=0.10, right=0.99, top=0.92, bottom=0.16)
     return fig
 
 
 # ============================
-# LaTeX tables
+# LaTeX tables (one per dataset)
 # ============================
 
 def _fmt_int(x: float) -> str:
@@ -1075,7 +1051,7 @@ def plot_cost_vs_accuracy_post_drift(
 
 
 # ============================
-# Diagnostics
+# Optional: observed annotator accuracies
 # ============================
 
 def print_observed_annotator_accuracies(
@@ -1111,7 +1087,7 @@ def print_method_summary_post_drift(
     datasets: Sequence[DatasetConfig],
 ) -> None:
     print("\nPost-drift summary")
-    print("-" * 90)
+    print("-" * 80)
     for ds in datasets:
         d = df_all[df_all[schema.dataset].astype(str) == ds.name].copy()
         d = d[d[schema.t].astype(int) >= int(ds.drift_t)].copy()
@@ -1147,15 +1123,13 @@ if __name__ == "__main__":
             n=2000,
             drift_t=DRIFT_T,
             b_sal=0.12,
-            b_adwin_base=0.10,
-            b_adwin_alarm=0.30,
+            b_adwin=0.12,
             b_oracle=0.12,
             b_human=0.05,
-            adwin_delta=0.08,
-            adwin_max_window=300,
-            adwin_min_window=30,
-            adwin_alarm_window=240,
-            adwin_lr_boost=0.004,
+            adwin_delta=0.02,
+            adwin_max_window=200,
+            adwin_min_window=40,
+            adwin_cooldown=80,
             alpha_margin=0.6,
             oracle_acc=0.95,
             human_acc=1.00,
@@ -1168,7 +1142,7 @@ if __name__ == "__main__":
             pre_acc_sal=0.93,
             post_acc_sal=0.55,
             pre_acc_adwin=0.93,
-            post_acc_adwin=0.61,
+            post_acc_adwin=0.58,
             pre_acc_sym=0.93,
             post_acc_sym=0.55,
             post_noise=0.02,
@@ -1177,15 +1151,13 @@ if __name__ == "__main__":
             n=2000,
             drift_t=DRIFT_T,
             b_sal=0.12,
-            b_adwin_base=0.10,
-            b_adwin_alarm=0.28,
+            b_adwin=0.12,
             b_oracle=0.12,
             b_human=0.05,
-            adwin_delta=0.08,
-            adwin_max_window=300,
-            adwin_min_window=30,
-            adwin_alarm_window=220,
-            adwin_lr_boost=0.004,
+            adwin_delta=0.02,
+            adwin_max_window=200,
+            adwin_min_window=40,
+            adwin_cooldown=80,
             alpha_margin=0.6,
             oracle_acc=0.95,
             human_acc=1.00,
@@ -1198,7 +1170,7 @@ if __name__ == "__main__":
             pre_acc_sal=0.93,
             post_acc_sal=0.58,
             pre_acc_adwin=0.93,
-            post_acc_adwin=0.61,
+            post_acc_adwin=0.60,
             pre_acc_sym=0.94,
             post_acc_sym=0.58,
             post_noise=0.02,
@@ -1207,15 +1179,13 @@ if __name__ == "__main__":
             n=2000,
             drift_t=DRIFT_T,
             b_sal=0.12,
-            b_adwin_base=0.10,
-            b_adwin_alarm=0.28,
+            b_adwin=0.12,
             b_oracle=0.12,
             b_human=0.05,
-            adwin_delta=0.08,
-            adwin_max_window=300,
-            adwin_min_window=30,
-            adwin_alarm_window=220,
-            adwin_lr_boost=0.004,
+            adwin_delta=0.02,
+            adwin_max_window=200,
+            adwin_min_window=40,
+            adwin_cooldown=80,
             alpha_margin=0.6,
             oracle_acc=0.95,
             human_acc=1.00,
@@ -1228,7 +1198,7 @@ if __name__ == "__main__":
             pre_acc_sal=0.92,
             post_acc_sal=0.56,
             pre_acc_adwin=0.92,
-            post_acc_adwin=0.60,
+            post_acc_adwin=0.58,
             pre_acc_sym=0.93,
             post_acc_sym=0.56,
             post_noise=0.02,
@@ -1242,7 +1212,7 @@ if __name__ == "__main__":
         params_by_dataset=params_by_ds,
     )
 
-    # 2) Diagnostics
+    # Optional: report observed annotator accuracies from the actual simulation
     print_observed_annotator_accuracies(
         df,
         schema=schema,
@@ -1255,7 +1225,7 @@ if __name__ == "__main__":
         datasets=DATASETS,
     )
 
-    # 3) Figures
+    # 2) Figures: compact full-timeline accuracy/query plots + post-drift cost/accuracy plots
     out_fig = Path("paper_figures")
     for ds in DATASETS:
         df_ds = df[df[schema.dataset].astype(str) == ds.name].copy()
@@ -1271,7 +1241,7 @@ if __name__ == "__main__":
             symbiosis_name="Symbiosis-Edge",
             symbiosis_red="tab:red",
             show_title=True,
-            fig_size=(6.9, 3.9),
+            fig_size=(6.8, 3.35),
             x_max=2000,
         )
         _save_fig(fig, out_fig / f"{ds.name.lower()}_accuracy_plus_query_counts_compact")
@@ -1288,7 +1258,7 @@ if __name__ == "__main__":
         )
         plt.close(fig2)
 
-    # 4) LaTeX tables
+    # 3) LaTeX tables: post-drift only
     out_tables = Path("paper_tables")
     generate_tables_for_all_datasets(
         df,

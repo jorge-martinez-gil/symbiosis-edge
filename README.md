@@ -1,106 +1,118 @@
 # Symbiosis-Edge
 
-### Cost-Theoretic Drift Adaptation via Edge Models, LLM Oracles, and Human Experts
+Cost-theoretic drift adaptation with edge models, LLM oracles, and human experts.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg)](https://www.python.org/)
 [![TensorFlow Lite](https://img.shields.io/badge/TFLite-Compatible-FF6F00.svg)](https://www.tensorflow.org/lite)
 
-
-
-[Paper](#citation) · [Overview](#overview) · [Architecture](#architecture) · [Results](#key-results) · [Getting Started](#getting-started) · [Citation](#citation)
-
-</div>
-
----
-
 ## Overview
 
-Industrial edge systems degrade under **concept drift**, yet the supervision needed to adapt them is scarce, expensive, and heterogeneous. Existing approaches treat drift handling as uncertainty-based sampling under a single oracle — overlooking latency, financial cost, and constrained human attention.
+Industrial edge systems degrade under concept drift, but the supervision needed to adapt them is scarce, expensive, and heterogeneous. Symbiosis-Edge frames drift adaptation as a supervision allocation problem under resource constraints.
 
-**Symbiosis-Edge** recasts drift adaptation as a **supervision allocation problem** under resource constraints. Each uncertain instance is routed to the *least costly agent* that can resolve it with sufficient expected utility:
+Each uncertain instance is routed to the least costly agent that can resolve it with sufficient expected utility:
 
 | Agent | Cost | Strength | Role |
-|---|---|---|---|
-| **Edge Model** | ≈ 0 | Fast, local inference | Handles routine predictions |
-| **LLM Oracle** | Moderate | Zero-shot reasoning | Resolves ambiguous cases + generates explanations |
-| **Human Expert** | High | Ground-truth authority | Validates critical decisions |
+| --- | --- | --- | --- |
+| Edge model | Approx. 0 | Fast local inference | Handles routine predictions |
+| LLM oracle | Moderate | Zero-shot reasoning | Resolves ambiguous cases and generates explanations |
+| Human expert | High | Ground-truth authority | Validates critical decisions |
 
-This transforms drift adaptation from a *query selection* problem into a **cost-aware routing problem** with measurable economic impact.
+This turns drift adaptation from query selection into cost-aware routing with measurable economic impact.
 
----
+## Repository Layout
+
+```text
+.
+├── scripts/
+│   ├── run_multi_dataset.py       # Main multi-seed experiment with ADWIN-SAL
+│   ├── run_single_run.py          # One-run version for fast figure generation
+│   ├── run_without_adwin.py       # Ablation without the ADWIN-SAL baseline
+│   ├── run_chatbase_oracle.py     # Chatbase-backed oracle experiment
+│   ├── run_llama3_oracle.py       # Groq Llama 3-backed oracle experiment
+│   └── run_mistral_oracle.py      # Mistral-backed oracle experiment
+├── docs/
+│   └── experiments.md             # Experiment notes and script guide
+├── requirements.txt
+├── .env.example
+├── LICENSE
+└── README.md
+```
+
+Generated artifacts are written to `paper_figures/` and `paper_tables/`.
+
+## Getting Started
+
+Create a virtual environment and install the dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+On Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Run the main offline experiment:
+
+```bash
+python scripts/run_multi_dataset.py
+```
+
+Run a faster single-run version:
+
+```bash
+python scripts/run_single_run.py
+```
+
+## LLM Oracle Runs
+
+The LLM-backed scripts require API keys. Copy `.env.example`, fill in the relevant values, and export them in your shell before running the script.
+
+```bash
+python scripts/run_chatbase_oracle.py
+python scripts/run_llama3_oracle.py
+python scripts/run_mistral_oracle.py
+```
+
+The LLM scripts include a development mode in the source code to reduce cost while testing.
 
 ## Core Mechanisms
 
-### Cost-Aware Routing Policy
-
 The routing policy minimizes total cost over a sliding window:
 
-$$J = \sum_{t \in W} \bigl[\mathbb{1}(\hat{y}_t \neq y_t) \cdot \lambda_{\text{err}} + C_{\pi(x_t)}\bigr]$$
+```text
+J = sum_t [1(y_hat_t != y_t) * lambda_err + C_pi(x_t)]
+```
 
-### Entropy-Based Uncertainty Signal
+Shannon entropy from the edge model softmax acts as the routing signal:
 
-Shannon entropy from the edge model's softmax output serves as the routing signal — requiring only that higher entropy correlates with higher error risk on average, not perfect calibration:
+```text
+u_E(x) = -sum_k p_k(x) log p_k(x)
+```
 
-$$u_E(x) = -\sum_{k=1}^{K} p_k(x) \log p_k(x)$$
-
-### Budget-Aware Threshold Adaptation
-
-Dynamic thresholds derived from sliding-window quantiles enforce strict supervision budgets without manual tuning:
-
-$$\tau_2^{(t)} = \text{Quantile}_{1-B_H}(\mathcal{D}_W), \qquad \tau_1^{(t)} = \text{Quantile}_{1-(B_H+B_O)}(\mathcal{D}_W)$$
-
-This guarantees human load ≤ B_H and oracle load ≤ B_O regardless of drift severity.
-
-### Edge-Local Online Transfer
-
-Only the classification head θ_ψ is updated; the feature extractor θ_φ remains frozen — enabling fast adaptation while preventing catastrophic forgetting.
-
----
+Dynamic thresholds from sliding-window quantiles enforce oracle and human budgets without manual tuning.
 
 ## Key Results
 
-Evaluated on three streams (synthetic drift, SECOM semiconductor manufacturing, APS vehicle failure) across 20 seeds with statistical significance at α = 0.05:
+Across synthetic drift, SECOM semiconductor manufacturing, and APS vehicle failure streams, Symbiosis-Edge reduces supervision cost by more than 50 percent compared with single-oracle approaches while improving post-drift accuracy.
 
-| Dataset | Method | Total Cost | Mean Accuracy | AGUC |
-|---|---|---:|---:|---:|
-| **Synthetic** | SAL | 2900 | 0.871 | 0.082 |
-| | ADWIN-SAL | 2870 | 0.906 | 0.095 |
-| | **Symbiosis-Edge** | **1273** | **0.935** | **0.237** |
-| **SECOM** | SAL | 3000 | 0.868 | 0.080 |
-| | ADWIN-SAL | 2980 | 0.906 | 0.093 |
-| | **Symbiosis-Edge** | **1291** | **0.950** | **0.250** |
-| **APS** | SAL | 3060 | 0.851 | 0.071 |
-| | ADWIN-SAL | 2960 | 0.901 | 0.090 |
-| | **Symbiosis-Edge** | **1354** | **0.940** | **0.225** |
+## Citation
 
-**Highlights:**
-- Recovery after abrupt drift within **~40 samples**
-- Up to **2× cost-efficiency** (AGUC) over active-learning baselines
-- Supervision cost reduced by **>50%** compared to single-oracle approaches
-- Results validated with a live LLM oracle (ChatGPT-5.2, Llama 3, Mistral) — deviations < 2%
-
-**AGUC** (*Accuracy Gain per Unit Cost*) = (Acc_method − Acc_static) / TotalCost — measures how efficiently supervision budget converts into post-drift accuracy.
-
----
-
-## Acknowledgments
-
-This work was funded by the EU via the **ASTRID** action (oc1-2025-TIS-01), implemented under the **ENFIELD** project, grant agreement No 101120657.
-
----
-
+If you use this project in academic work, please cite the associated paper or repository.
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
 
----
+## Contact
 
-<div align="center">
+Questions or collaboration: [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at)
 
-**Questions or collaboration?** Open an issue or contact [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at)
-
-Software Competence Center Hagenberg (SCCH) · Softwarepark 32a · 4232 Hagenberg, Austria
-
-</div>
+Software Competence Center Hagenberg (SCCH), Softwarepark 32a, 4232 Hagenberg, Austria
