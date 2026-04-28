@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If Symbiosis-Edge supports your research, please cite this software."
+title: "Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models, LLM Oracles, and Human Experts"
+type: software
+authors:
+  - family-names: "Martinez-Gil"
+    given-names: "Jorge"
+year: 2026
+license: MIT
+abstract: "Research software for evaluating cost-aware supervision routing under concept drift with edge models, LLM oracles, and human experts."
+keywords:
+  - concept drift
+  - edge AI
+  - active learning
+  - human-in-the-loop learning
+  - large language models
+  - cost-aware machine learning
+repository-code: "https://github.com/jorge-martinez-gil/symbiosis-edge"

@@ -1,0 +1,28 @@
+{
+  "title": "Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models, LLM Oracles, and Human Experts",
+  "creators": [
+    {
+      "name": "Martinez-Gil, Jorge",
+      "affiliation": "Software Competence Center Hagenberg"
+    }
+  ],
+  "description": "Research software for evaluating cost-aware supervision routing under concept drift with edge models, LLM oracles, and human experts.",
+  "license": "MIT",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/jorge-martinez-gil/symbiosis-edge",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "keywords": [
+    "concept drift",
+    "edge AI",
+    "active learning",
+    "human-in-the-loop learning",
+    "large language models",
+    "cost-aware machine learning"
+  ],
+  "upload_type": "software",
+  "access_right": "open"
+}
