@@ -171,21 +171,6 @@ The oracle scripts expect strict JSON responses:
 {"label": 0}
 ```
 
-## Citation
-
-If this repository helps your research, please cite it. Until venue metadata is available, use the software citation below.
-
-```bibtex
-@software{MartinezGil2026SymbiosisEdge,
-  author = {Martinez-Gil, Jorge},
-  title = {Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models, LLM Oracles, and Human Experts},
-  year = {2026},
-  license = {MIT},
-  note = {Research software for cost-aware supervision routing under concept drift}
-}
-```
-
-GitHub also detects the repository-level [CITATION.cff](CITATION.cff) file and can expose a "Cite this repository" button.
 
 ## License
 
