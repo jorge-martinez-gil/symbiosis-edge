@@ -37,19 +37,6 @@ Most drift-handling pipelines treat supervision as a binary choice: query or do 
 
 The policy routes each uncertain instance to the least costly agent expected to provide enough utility, while respecting oracle and human supervision budgets.
 
-```mermaid
-flowchart LR
-    A["Streaming instance"] --> B["Edge model prediction"]
-    B --> C["Entropy and margin uncertainty"]
-    C --> D{"Budget-aware router"}
-    D -->|Low uncertainty| E["Accept edge prediction"]
-    D -->|Medium uncertainty| F["Ask LLM oracle"]
-    D -->|High uncertainty| G["Ask human expert"]
-    F --> H["Online head update"]
-    G --> H
-    E --> I["Cost and accuracy accounting"]
-    H --> I
-```
 
 ## Contributions
 
