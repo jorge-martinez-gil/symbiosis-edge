@@ -1,170 +1,146 @@
 # Symbiosis-Edge
 
-**Cost-aware drift adaptation for edge AI with LLM oracles and human experts.**
+**Cost-aware supervision routing under concept drift — a reproducible benchmark for edge models, LLM oracles, and human experts.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg)](https://www.python.org/)
-[![Reproducible Experiments](https://img.shields.io/badge/experiments-reproducible-2E7D32.svg)](docs/experiments.md)
+[![CI](https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml/badge.svg)](https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml)
+[![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](tests/)
+[![Reproducible](https://img.shields.io/badge/experiments-reproducible-2E7D32.svg)](docs/experiments.md)
 [![Citation Metadata](https://img.shields.io/badge/citation-CFF-8A2BE2.svg)](CITATION.cff)
 
-Symbiosis-Edge studies a simple question with practical consequences:
+Symbiosis-Edge studies a simple question with practical consequences for **streaming machine learning**, **online learning**, and **Edge AI**:
 
-> When an edge model becomes uncertain under concept drift, should the system trust the edge model, ask an LLM oracle, or spend scarce human expert attention?
+> When an edge model becomes uncertain under **concept drift**, should the system trust the edge model, ask an **LLM oracle**, or spend scarce **human-expert** attention?
 
-The repository provides simulation code, baselines, ablations, and LLM-backed oracle variants for evaluating **supervision routing under cost, latency, and budget constraints**.
+It provides a tested Python package, a one-command benchmark runner, baselines, ablations, and LLM-backed oracle variants for evaluating **supervision routing under cost, latency, and budget constraints**.
 
-## Why Cite This Work
+## What problem does this solve?
 
-Use Symbiosis-Edge as a reference implementation when your work involves:
-
-| Research need | What this repository provides |
-| --- | --- |
-| Cost-aware concept drift adaptation | Routing policies that optimize accuracy gain against supervision cost |
-| Human-in-the-loop edge AI | Explicit human budget constraints and expert escalation logic |
-| LLMs as weak oracles | Chatbase, Llama 3, and Mistral oracle scripts with strict JSON label contracts |
-| Reproducible drift experiments | Synthetic, SECOM, and APS stream experiments with paper-style plots and tables |
-| Active learning baselines | Static, SAL, ADWIN-SAL, and ablated Symbiosis-Edge variants |
-
-## Main Idea
-
-Most drift-handling pipelines treat supervision as a binary choice: query or do not query. Symbiosis-Edge treats it as an **allocation problem** across three agents:
+Most drift-handling pipelines treat supervision as a binary choice: query or do not query. Symbiosis-Edge reframes it as an **allocation problem** across three agents with very different costs and strengths:
 
 | Agent | Cost | Strength | Role |
 | --- | --- | --- | --- |
-| Edge model | Approx. 0 | Fast local inference | Handles routine predictions |
-| LLM oracle | Moderate | Broad zero-shot reasoning | Resolves ambiguous cases and provides explanations |
+| Edge model | ~0 | Fast local inference | Handles routine predictions |
+| LLM oracle | Moderate | Broad zero-shot reasoning | Resolves ambiguous cases, gives explanations |
 | Human expert | High | Ground-truth authority | Validates critical or expensive decisions |
 
-The policy routes each uncertain instance to the least costly agent expected to provide enough utility, while respecting oracle and human supervision budgets.
+The policy routes each uncertain instance to the **least costly agent expected to provide enough utility**, while respecting oracle and human supervision budgets. This is why *adaptive supervision* matters: under drift, a fixed query policy either overspends on supervision or fails to recover, whereas budget-aware routing recovers accuracy at a fraction of the cost.
 
+## How is this different from active learning?
 
-## Contributions
+Classical active learning asks *which* instances to label from a single annotator with a single cost. Symbiosis-Edge generalises this along three axes that matter in deployed **human-in-the-loop** and **Industry 5.0** systems: (1) **multiple annotators** with heterogeneous cost and reliability (edge / oracle / human), (2) an explicit **supervision budget** per tier, and (3) an **online, drift-aware** setting where the uncertainty distribution itself shifts over time. The benchmark reports not just accuracy but the full **cost–quality trade-off**.
 
-1. A cost-theoretic formulation of drift adaptation as supervision allocation rather than binary query selection.
-2. A budget-aware routing policy that separates edge, oracle, and human decisions through adaptive quantile thresholds.
-3. Reproducible experiments comparing Static, SAL, ADWIN-SAL, and Symbiosis-Edge across multiple drift streams.
-4. Provider-specific LLM oracle implementations for studying the practical role of large language models in online adaptation.
+## Reproducible simulation — what this is (and isn't)
 
-## Highlights
+> The bundled experiments are a **controlled parametric simulation** of the routing problem, not the training of real classifiers on raw data. Dataset names (`SYNTHETIC`, `SECOM`, `APS`) select **parameter presets**; no external data is loaded in the simulation path. This keeps the routing dynamics transparent and fully deterministic. Every number is regenerated by `symbiosis-edge run` and accompanied by a `manifest.json` (versions, seeds, parameters, checksums). Wiring in real streaming datasets and online learners is on the roadmap — see [`docs/methodology.md`](docs/methodology.md) and [`docs/extending.md`](docs/extending.md).
 
-- **>50% lower supervision cost** compared with single-oracle strategies in the reported experiments.
-- **Up to 2x higher cost efficiency** measured as accuracy gain per unit cost.
-- **Post-drift recovery in roughly 40 samples** in abrupt-drift settings.
-- **Budget-aware routing** through sliding-window quantile thresholds.
-- **LLM oracle variants** for Chatbase, Groq Llama 3, and Mistral AI.
+## Install
 
-## Results Snapshot
+```bash
+git clone https://github.com/jorge-martinez-gil/symbiosis-edge
+cd symbiosis-edge
+pip install -e .
+```
 
-| Dataset | Method | Total Cost | Mean Accuracy | AGUC |
+## Quick start
+
+```bash
+# See methods, presets, and metrics
+symbiosis-edge info
+
+# Reproduce the full benchmark (figures + LaTeX tables + manifest) -> results/
+symbiosis-edge run --seeds 5 --out results
+
+# A fast smoke run
+symbiosis-edge run --quick --out /tmp/se-smoke
+```
+
+Or use the library directly:
+
+```python
+from symbiosis_edge import SimParams, simulate_one_run, post_drift_summary
+
+df = simulate_one_run(dataset="SYNTHETIC", seed=0, params=SimParams())
+print(post_drift_summary(df, drift_t=500))
+```
+
+## Results snapshot
+
+Post-drift means across 5 seeds, reproduced with `symbiosis-edge run --seeds 5`:
+
+| Dataset | Method | Total cost | Mean acc. | Macro-F1 |
 | --- | --- | ---: | ---: | ---: |
-| Synthetic | SAL | 2900 | 0.871 | 0.082 |
-| Synthetic | ADWIN-SAL | 2870 | 0.906 | 0.095 |
-| Synthetic | Symbiosis-Edge | **1273** | **0.935** | **0.237** |
-| SECOM | SAL | 3000 | 0.868 | 0.080 |
-| SECOM | ADWIN-SAL | 2980 | 0.906 | 0.093 |
-| SECOM | Symbiosis-Edge | **1291** | **0.950** | **0.250** |
-| APS | SAL | 3060 | 0.851 | 0.071 |
-| APS | ADWIN-SAL | 2960 | 0.901 | 0.090 |
-| APS | Symbiosis-Edge | **1354** | **0.940** | **0.225** |
+| SYNTHETIC | SAL | 2640 | 0.888 | 0.888 |
+| SYNTHETIC | ADWIN-SAL | 2824 | 0.916 | 0.916 |
+| SYNTHETIC | **Symbiosis-Edge** | **1252** | **0.929** | **0.929** |
+| SECOM | SAL | 3126 | 0.876 | 0.875 |
+| SECOM | ADWIN-SAL | 2904 | 0.908 | 0.908 |
+| SECOM | **Symbiosis-Edge** | **1348** | **0.950** | **0.950** |
+| APS | SAL | 2888 | 0.867 | 0.867 |
+| APS | ADWIN-SAL | 2916 | 0.902 | 0.902 |
+| APS | **Symbiosis-Edge** | **1310** | **0.941** | **0.941** |
 
-AGUC means **Accuracy Gain per Unit Cost**:
+Across all three presets, Symbiosis-Edge reaches the **highest accuracy at 50–57% lower supervision cost** than the single-oracle baselines, giving roughly **2–3x higher accuracy gain per unit cost (AGUC)**. AGUC is defined per the post-drift segment as
 
 ```text
 AGUC = (Accuracy_method - Accuracy_static) / TotalCost
 ```
 
-## How It Works
+The Static baseline (no supervision) collapses post-drift; full per-method tables (including MCC, Cohen's kappa, balanced accuracy, query counts, and confidence intervals) are written to `results/` and `results/summary_ci.csv`.
 
-The routing objective combines error penalty and supervision cost:
+## How it works
+
+Uncertainty comes from edge-model entropy plus a top-two margin term:
 
 ```text
-J = sum_t [1(y_hat_t != y_t) * lambda_err + C_pi(x_t)]
+u(x) = H(p) + alpha * (1 - margin(p))
 ```
 
-Uncertainty comes from edge-model entropy:
+Budget-aware thresholds are sliding-window quantiles, so the realised query rate tracks the budget even as the uncertainty distribution drifts:
 
 ```text
-u_E(x) = -sum_k p_k(x) log p_k(x)
-```
-
-Budget-aware thresholds are estimated from sliding-window quantiles:
-
-```text
-tau_human = Quantile_{1 - B_H}(D_W)
+tau_human  = Quantile_{1 - B_H}(D_W)
 tau_oracle = Quantile_{1 - (B_H + B_O)}(D_W)
 ```
 
-Only the classification head is updated online; the feature extractor remains frozen to keep adaptation lightweight for edge deployment.
+Symbiosis-Edge routes `u > tau_human` to the human, `tau_oracle < u <= tau_human` to the oracle, and keeps the rest on the edge. Baselines: **Static** (never query), **SAL** (one oracle threshold), **ADWIN-SAL** (drift-aware budget via an ADWIN detector). See [`docs/methodology.md`](docs/methodology.md) for the exact model.
 
-## Repository Layout
+## How do I ...
+
+**... reproduce the experiments?** `pip install -e . && symbiosis-edge run --seeds 5 --out results`. Every output carries a `manifest.json` for traceability.
+
+**... benchmark a new routing algorithm?** Reuse the shared uncertainty score and budget thresholds, add your method to `simulation.METHODS`, and add a determinism + budget test. A worked example and the planned policy plug-in API are in [`docs/extending.md`](docs/extending.md).
+
+**... integrate my own oracle?** The supervision step is parameterised by an annotator accuracy and learning rate (`oracle_acc`, `lr_oracle`). For live LLM oracles, the provider scripts in `scripts/` (Chatbase, Groq Llama 3, Mistral) show the request/JSON-label contract; install with `pip install -e ".[llm]"` and set credentials from `.env.example`.
+
+**... simulate annotation costs?** Pass `--cost-oracle`, `--cost-human`, and `--cost-edge` to the CLI, or a `CostModel(...)` to `run_experiment(...)`. All cost and AGUC numbers update accordingly.
+
+**... contribute?** See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the issue/PR templates. Benchmark-result submissions should include the run's `manifest.json`.
+
+## Repository layout
 
 ```text
-.
-|-- scripts/
-|   |-- run_multi_dataset.py
-|   |-- run_single_run.py
-|   |-- run_without_adwin.py
-|   |-- run_chatbase_oracle.py
-|   |-- run_llama3_oracle.py
-|   `-- run_mistral_oracle.py
-|-- docs/
-|   `-- experiments.md
-|-- CITATION.cff
-|-- requirements.txt
-|-- .env.example
-|-- LICENSE
-`-- README.md
+symbiosis_edge/      installable, tested library (uncertainty, routing, drift,
+                     simulation, metrics, datasets, viz, report, cli)
+tests/               pytest suite (determinism, routing, ADWIN, metrics, CLI)
+scripts/             thin wrappers + LLM-oracle variants
+scripts/_legacy/     original monolithic scripts, kept for reference
+docs/                methodology.md, extending.md, experiments.md
+.github/workflows/   CI (lint + tests across Python 3.9-3.12)
 ```
 
-Generated figures and tables are written to `paper_figures/` and `paper_tables/`.
+## Citation
 
-## Quick Start
+If Symbiosis-Edge supports your research, please cite:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/run_single_run.py
-```
-
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python scripts\run_single_run.py
-```
-
-Run the full offline experiment:
-
-```bash
-python scripts/run_multi_dataset.py
-```
-
-## LLM Oracle Runs
-
-Copy `.env.example`, set the provider credentials, and export the variables in your shell.
-
-```bash
-python scripts/run_chatbase_oracle.py
-python scripts/run_llama3_oracle.py
-python scripts/run_mistral_oracle.py
-```
-
-The oracle scripts expect strict JSON responses:
-
-```json
-{"label": 0}
-```
 
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT — see [`LICENSE`](LICENSE).
 
 ## Contact
 
-Questions or collaboration: [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at)
-
+Questions or collaboration: [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at) ·
 Software Competence Center Hagenberg (SCCH), Softwarepark 32a, 4232 Hagenberg, Austria.

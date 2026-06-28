@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "symbiosis-edge"
+version = "0.2.0"
+description = "Cost-aware supervision routing under concept drift: a reproducible simulation benchmark for edge models, LLM oracles, and human experts."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Jorge Martinez-Gil", email = "jorge.martinez-gil@scch.at" }]
+keywords = [
+    "concept drift",
+    "concept drift benchmark",
+    "active learning",
+    "online learning",
+    "human-in-the-loop learning",
+    "cost-aware machine learning",
+    "edge AI",
+    "adaptive supervision",
+    "stream learning",
+    "drift adaptation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+llm = ["aiohttp>=3.9"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/jorge-martinez-gil/symbiosis-edge"
+Repository = "https://github.com/jorge-martinez-gil/symbiosis-edge"
+Issues = "https://github.com/jorge-martinez-gil/symbiosis-edge/issues"
+
+[project.scripts]
+symbiosis-edge = "symbiosis_edge.cli:main"
+
+[tool.setuptools]
+packages = ["symbiosis_edge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E741", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402", "E501"]

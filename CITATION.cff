@@ -5,6 +5,8 @@ type: software
 authors:
   - family-names: "Martinez-Gil"
     given-names: "Jorge"
+version: "0.2.0"
+date-released: 2026-06-28
 year: 2026
 license: MIT
 abstract: "Research software for evaluating cost-aware supervision routing under concept drift with edge models, LLM oracles, and human experts."

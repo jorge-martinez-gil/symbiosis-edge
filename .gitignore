@@ -12,3 +12,18 @@ venv/
 paper_figures/
 paper_tables/
 *.log
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Experiment outputs
+results/
+*.csv.gz
+
+# Coverage
+.coverage
+htmlcov/
+.ruff_cache/
