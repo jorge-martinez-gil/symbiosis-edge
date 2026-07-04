@@ -15,6 +15,9 @@
       "scheme": "url"
     }
   ],
+  "references": [
+    "Jorge Martinez-Gil, Florian Bachinger, Rudolf Ramler, Francois Picard, Leïla Belmerhnia, Georgios Spathoulas: Drift Adaptation as Supervision Routing under Heterogeneous Costs. DEXA 2026, pp. 49-63, Springer."
+  ],
   "keywords": [
     "concept drift",
     "edge AI",

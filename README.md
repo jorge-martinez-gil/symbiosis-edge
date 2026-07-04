@@ -67,6 +67,11 @@ print(post_drift_summary(df, drift_t=500))
 
 ## Results snapshot
 
+<p align="center">
+  <img src="docs/assets/preview_accuracy.png" width="49%" alt="Rolling accuracy under concept drift for each routing method">
+  <img src="docs/assets/preview_cost.png" width="49%" alt="Post-drift cost versus accuracy trade-off per method">
+</p>
+
 Post-drift means across 5 seeds, reproduced with `symbiosis-edge run --seeds 5`:
 
 | Dataset | Method | Total cost | Mean acc. | Macro-F1 |
@@ -132,9 +137,33 @@ docs/                methodology.md, extending.md, experiments.md
 
 ## Citation
 
-If Symbiosis-Edge supports your research, please cite:
+If Symbiosis-Edge supports your research, please cite the accompanying paper:
 
+```bibtex
+@inproceedings{martinezgil2026drift,
+  author    = {Jorge Martinez-Gil and Florian Bachinger and Rudolf Ramler and
+               Francois Picard and Le{\"i}la Belmerhnia and Georgios Spathoulas},
+  title     = {Drift Adaptation as Supervision Routing under Heterogeneous Costs},
+  booktitle = {DEXA 2026},
+  pages     = {49--63},
+  year      = {2026},
+  publisher = {Springer}
+}
+```
 
+To cite the software itself, use GitHub's **"Cite this repository"** button (backed by [`CITATION.cff`](CITATION.cff)) or:
+
+```bibtex
+@software{symbiosisedge_software,
+  author  = {Martinez-Gil, Jorge},
+  title   = {Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models,
+             LLM Oracles, and Human Experts},
+  year    = {2026},
+  version = {0.2.0},
+  url     = {https://github.com/jorge-martinez-gil/symbiosis-edge},
+  license = {MIT}
+}
+```
 
 ## License
 

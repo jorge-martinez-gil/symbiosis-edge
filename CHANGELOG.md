@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- README citation section with BibTeX for the accompanying DEXA 2026 paper
+  and for the software.
+- `preferred-citation` entry in `CITATION.cff` pointing to the DEXA 2026 paper.
+- Result preview figures embedded in the README (served from `docs/assets/`,
+  since `results/` is gitignored).
+
 ## [0.2.0] - 2026-06-28
 
 ### Added

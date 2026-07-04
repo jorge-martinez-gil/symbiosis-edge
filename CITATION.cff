@@ -1,13 +1,14 @@
 cff-version: 1.2.0
-message: "If Symbiosis-Edge supports your research, please cite this software."
+message: "If Symbiosis-Edge supports your research, please cite the accompanying paper (preferred) or this software."
 title: "Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models, LLM Oracles, and Human Experts"
 type: software
 authors:
   - family-names: "Martinez-Gil"
     given-names: "Jorge"
+    affiliation: "Software Competence Center Hagenberg (SCCH)"
+    email: "jorge.martinez-gil@scch.at"
 version: "0.2.0"
 date-released: 2026-06-28
-year: 2026
 license: MIT
 abstract: "Research software for evaluating cost-aware supervision routing under concept drift with edge models, LLM oracles, and human experts."
 keywords:
@@ -18,3 +19,26 @@ keywords:
   - large language models
   - cost-aware machine learning
 repository-code: "https://github.com/jorge-martinez-gil/symbiosis-edge"
+preferred-citation:
+  type: conference-paper
+  title: "Drift Adaptation as Supervision Routing under Heterogeneous Costs"
+  authors:
+    - family-names: "Martinez-Gil"
+      given-names: "Jorge"
+      affiliation: "Software Competence Center Hagenberg (SCCH)"
+    - family-names: "Bachinger"
+      given-names: "Florian"
+    - family-names: "Ramler"
+      given-names: "Rudolf"
+    - family-names: "Picard"
+      given-names: "Francois"
+    - family-names: "Belmerhnia"
+      given-names: "Leïla"
+    - family-names: "Spathoulas"
+      given-names: "Georgios"
+  collection-title: "DEXA 2026"
+  publisher:
+    name: "Springer"
+  start: 49
+  end: 63
+  year: 2026
