@@ -151,19 +151,6 @@ If Symbiosis-Edge supports your research, please cite the accompanying paper:
 }
 ```
 
-To cite the software itself, use GitHub's **"Cite this repository"** button (backed by [`CITATION.cff`](CITATION.cff)) or:
-
-```bibtex
-@software{symbiosisedge_software,
-  author  = {Martinez-Gil, Jorge},
-  title   = {Symbiosis-Edge: Cost-Aware Drift Adaptation with Edge Models,
-             LLM Oracles, and Human Experts},
-  year    = {2026},
-  version = {0.2.0},
-  url     = {https://github.com/jorge-martinez-gil/symbiosis-edge},
-  license = {MIT}
-}
-```
 
 ## License
 
