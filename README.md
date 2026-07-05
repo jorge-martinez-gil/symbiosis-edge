@@ -94,6 +94,10 @@ AGUC = (Accuracy_method - Accuracy_static) / TotalCost
 
 The Static baseline (no supervision) collapses post-drift; full per-method tables (including MCC, Cohen's kappa, balanced accuracy, query counts, and confidence intervals) are written to `results/` and `results/summary_ci.csv`.
 
+### Statistical rigor
+
+Every multi-seed run is evaluated with small-sample-honest statistics — no bare means. `symbiosis-edge run` reports **Student-t confidence intervals** (calibrated for few seeds, unlike a z-approximation), **exact paired sign-flip permutation tests** against every baseline with **Holm–Bonferroni correction**, effect sizes (**Cohen's d_z**, **Cliff's delta**), and a **cost–accuracy Pareto frontier** figure with CI error bars. At 10 seeds, Symbiosis-Edge's accuracy advantage over each baseline is significant at Holm-adjusted p < 0.01 with large effect sizes. Results land in `significance.csv`, `tables/table_significance_*.tex`, and `figures/pareto_*`; the statistical settings are recorded in `manifest.json`. See [`docs/experiments.md`](docs/experiments.md#statistical-methodology) for the methodology, including why ≥10 seeds are needed for significance claims.
+
 ## How it works
 
 Uncertainty comes from edge-model entropy plus a top-two margin term:

@@ -58,6 +58,12 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="Cost per human annotation (default: 10).")
     run.add_argument("--cost-edge", type=float, default=0.0,
                      help="Cost per edge step (default: 0).")
+    run.add_argument("--ci", type=float, default=0.95, choices=[0.90, 0.95, 0.99],
+                     help="Confidence level for Student-t intervals (default: 0.95).")
+    run.add_argument("--permutations", type=int, default=10_000,
+                     help="Monte-Carlo permutations for significance tests; an "
+                          "exact test is used automatically for <=14 seeds "
+                          "(default: 10000).")
     run.add_argument("--no-figures", action="store_true",
                      help="Skip figure rendering (faster).")
     run.add_argument("--quick", action="store_true",
@@ -122,10 +128,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
         seeds=seeds,
         cost=cost,
         make_figures=make_figures,
+        ci=args.ci,
+        n_permutations=args.permutations,
     )
 
     cols = ["dataset", "method", "accuracy", "macro_f1", "mcc", "n_queries", "total_cost", "aguc"]
     print(result.summary[cols].to_string(index=False))
+
+    if result.comparisons is not None:
+        sig = result.comparisons[result.comparisons["metric"] == "accuracy"]
+        sig_cols = ["dataset", "baseline", "diff_mean", "diff_ci", "p_value", "p_holm",
+                    "cohens_dz"]
+        print("\nPaired significance vs baselines (accuracy, post-drift):")
+        print(sig[sig_cols].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+
     print(f"\nArtifacts written to: {result.out_dir.resolve()}")
     print(f"Manifest: {result.manifest_path}")
     print(f"{len(result.files)} files generated.")
@@ -141,6 +157,8 @@ def _cmd_info(_: argparse.Namespace) -> int:
     print(f"Drift t : {DRIFT_T}")
     print("Metrics : accuracy, balanced_accuracy, macro_f1, mcc, cohen_kappa, "
           "total_cost, n_queries, aguc")
+    print("Stats   : Student-t CIs, paired permutation tests (Holm-adjusted), "
+          "Cohen's d_z, Cliff's delta, Pareto frontier")
     print("Docs    : docs/methodology.md  |  Reproduce: symbiosis-edge run")
     return 0
 

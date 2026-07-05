@@ -6,7 +6,40 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
 ### Added
+- **Statistics module** (`symbiosis_edge.stats`, numpy-only): Student-t
+  confidence intervals (`t_critical`, `mean_ci_t`), percentile-bootstrap CIs
+  (`bootstrap_ci`), **paired sign-flip permutation tests**
+  (`paired_permutation_test`; exact enumeration for <=14 seeds, Monte Carlo
+  with add-one correction beyond), effect sizes (`paired_cohens_d`,
+  `cliffs_delta`), **Holm-Bonferroni** correction (`holm_bonferroni`), a full
+  method-comparison battery (`compare_methods`), and Pareto-frontier
+  extraction (`pareto_frontier`).
+- **New artifacts** from `symbiosis-edge run` (multi-seed): `significance.csv`
+  (p-values, Holm-adjusted p-values, effect sizes per dataset/metric/baseline),
+  `tables/table_significance_*.tex`, and `figures/pareto_*.{pdf,png}`
+  (cost-accuracy Pareto frontier with CI error bars).
+- **CLI flags** `--ci {0.90,0.95,0.99}` and `--permutations N`; the run
+  summary now prints paired significance vs every baseline.
+- `metrics.per_seed_summary`: unaggregated per-(dataset, method, seed) rows,
+  the input for paired tests.
+- Statistical settings (CI method/level, test, correction) recorded in
+  `manifest.json`; "Statistical methodology" section in
+  `docs/experiments.md` with seed-count guidance (>=10 seeds for
+  significance claims); "Statistical rigor" section in the README.
+- Test suite for all statistical routines (exact permutation p-values,
+  t critical values, Holm monotonicity, Pareto dominance, end-to-end
+  `compare_methods` on a simulated run).
+
+### Changed
+- **Confidence intervals now use the Student-t critical value** instead of the
+  normal z approximation everywhere (`summarize_runs`, `mean_ci`, figure CI
+  bands). At the default 5 seeds this widens CIs by ~40% -- the previous
+  z-intervals were anti-conservative for small samples. Means are unchanged.
+
+### Earlier unreleased additions
 - README citation section with BibTeX for the accompanying DEXA 2026 paper
   and for the software.
 - `preferred-citation` entry in `CITATION.cff` pointing to the DEXA 2026 paper.

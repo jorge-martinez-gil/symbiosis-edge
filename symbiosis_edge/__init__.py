@@ -33,6 +33,7 @@ from .metrics import (
     aguc,
     mean_ci,
     method_cost,
+    per_seed_summary,
     post_drift_summary,
     summarize_runs,
 )
@@ -44,6 +45,17 @@ from .simulation import (
     simulate_datasets,
     simulate_one_run,
 )
+from .stats import (
+    bootstrap_ci,
+    cliffs_delta,
+    compare_methods,
+    holm_bonferroni,
+    mean_ci_t,
+    paired_cohens_d,
+    paired_permutation_test,
+    pareto_frontier,
+    t_critical,
+)
 from .uncertainty import (
     entropy,
     margin,
@@ -51,7 +63,7 @@ from .uncertainty import (
     uncertainty_score,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
@@ -80,7 +92,18 @@ __all__ = [
     "method_cost",
     "aguc",
     "mean_ci",
+    "per_seed_summary",
     "summarize_runs",
+    # stats
+    "t_critical",
+    "mean_ci_t",
+    "bootstrap_ci",
+    "paired_permutation_test",
+    "paired_cohens_d",
+    "cliffs_delta",
+    "holm_bonferroni",
+    "compare_methods",
+    "pareto_frontier",
     # datasets
     "DATASET_PRESETS",
     "get_preset",

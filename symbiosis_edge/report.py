@@ -23,13 +23,16 @@ import pandas as pd
 
 from . import __version__
 from .datasets import DATASET_PRESETS, default_datasets
-from .metrics import CostModel, post_drift_summary, summarize_runs
+from .metrics import CostModel, per_seed_summary, post_drift_summary, summarize_runs
 from .params import DatasetConfig, Schema, SimParams
 from .simulation import simulate_datasets
+from .stats import compare_methods
 from .viz import (
     latex_cost_table,
+    latex_significance_table,
     plot_accuracy_over_time,
     plot_cost_vs_accuracy,
+    plot_pareto_frontier,
     set_paper_style,
     summary_to_csv,
 )
@@ -45,6 +48,7 @@ class ExperimentResult:
     summary: pd.DataFrame
     ci_summary: pd.DataFrame
     raw: pd.DataFrame
+    comparisons: Optional[pd.DataFrame] = None
     files: List[Path] = field(default_factory=list)
     manifest_path: Optional[Path] = None
 
@@ -80,6 +84,8 @@ def run_experiment(
     drift_t: Optional[int] = None,
     make_figures: bool = True,
     schema: Schema = Schema(),
+    ci: float = 0.95,
+    n_permutations: int = 10_000,
 ) -> ExperimentResult:
     """Run the full benchmark and write all artifacts under ``out_dir``.
 
@@ -100,6 +106,11 @@ def run_experiment(
         the first dataset's ``drift_t``.
     make_figures:
         If ``False``, skip figure rendering (useful for fast CI smoke runs).
+    ci:
+        Confidence level for Student-t intervals (0.90, 0.95 or 0.99).
+    n_permutations:
+        Monte-Carlo permutations for the paired significance tests (an exact
+        test is used automatically when there are <= 14 seeds).
     """
     out_dir = Path(out_dir)
     fig_dir = out_dir / "figures"
@@ -117,15 +128,25 @@ def run_experiment(
         datasets=datasets, params_by_dataset=params_by_dataset, seeds=seeds
     )
     summary = post_drift_summary(raw, drift_t=drift_t, schema=schema, cost=cost)
-    ci_summary = (
-        summarize_runs(raw, drift_t=drift_t, schema=schema, cost=cost)
-        if len(seeds) > 1 else summary.copy()
-    )
+
+    multi_seed = len(seeds) > 1
+    comparisons: Optional[pd.DataFrame] = None
+    if multi_seed:
+        ci_summary = summarize_runs(raw, drift_t=drift_t, schema=schema, cost=cost, ci=ci)
+        per_seed = per_seed_summary(raw, drift_t=drift_t, schema=schema, cost=cost)
+        comparisons = compare_methods(
+            per_seed, ci=ci, n_permutations=n_permutations,
+            metrics=("accuracy", "macro_f1", "total_cost"),
+        )
+    else:
+        ci_summary = summary.copy()
 
     files: List[Path] = []
     files.append(summary_to_csv(summary, out_dir / "summary.csv"))
     files.append(summary_to_csv(ci_summary, out_dir / "summary_ci.csv"))
     files.append(summary_to_csv(raw, out_dir / "raw_runs.csv.gz"))
+    if comparisons is not None:
+        files.append(summary_to_csv(comparisons, out_dir / "significance.csv"))
 
     dataset_names = [ds.name for ds in datasets]
     tab_dir.mkdir(parents=True, exist_ok=True)
@@ -134,6 +155,11 @@ def run_experiment(
         p = tab_dir / f"table_cost_{name.lower()}.tex"
         p.write_text(tex, encoding="utf-8")
         files.append(p)
+        if comparisons is not None:
+            tex = latex_significance_table(comparisons, dataset=name, metric="accuracy")
+            p = tab_dir / f"table_significance_{name.lower()}.tex"
+            p.write_text(tex, encoding="utf-8")
+            files.append(p)
 
     if make_figures:
         set_paper_style()
@@ -141,15 +167,19 @@ def run_experiment(
             dsub = raw[raw[schema.dataset] == name]
             files += _save_accuracy(dsub, schema, drift_t, name, fig_dir)
             files += _save_cost_accuracy(summary, name, fig_dir)
+            if multi_seed:
+                files += _save_pareto(ci_summary, name, fig_dir)
 
     manifest_path = _write_manifest(
         out_dir=out_dir, files=files, datasets=datasets,
         params_by_dataset=params_by_dataset, seeds=seeds, cost=cost, drift_t=drift_t,
+        ci=ci, n_permutations=n_permutations,
     )
 
     return ExperimentResult(
         out_dir=out_dir, summary=summary, ci_summary=ci_summary,
-        raw=raw, files=files + [manifest_path], manifest_path=manifest_path,
+        raw=raw, comparisons=comparisons,
+        files=files + [manifest_path], manifest_path=manifest_path,
     )
 
 
@@ -172,6 +202,15 @@ def _save_cost_accuracy(summary, name, fig_dir) -> List[Path]:
     return [base.with_suffix(".pdf"), base.with_suffix(".png")]
 
 
+def _save_pareto(ci_summary, name, fig_dir) -> List[Path]:
+    plot_pareto_frontier(
+        ci_summary, dataset=name, title=f"{name}: cost-accuracy Pareto frontier",
+        out_base=fig_dir / f"pareto_{name.lower()}",
+    )
+    base = fig_dir / f"pareto_{name.lower()}"
+    return [base.with_suffix(".pdf"), base.with_suffix(".png")]
+
+
 def _write_manifest(
     *,
     out_dir: Path,
@@ -181,6 +220,8 @@ def _write_manifest(
     seeds: Sequence[int],
     cost: CostModel,
     drift_t: Optional[int],
+    ci: float = 0.95,
+    n_permutations: int = 10_000,
 ) -> Path:
     import numpy as np
 
@@ -200,6 +241,14 @@ def _write_manifest(
             "drift_t": drift_t,
             "datasets": [ds.name for ds in datasets],
             "cost_model": asdict(cost),
+            "statistics": {
+                "ci_level": ci,
+                "ci_method": "student-t",
+                "significance_test": "paired sign-flip permutation "
+                                     "(exact for <=14 seeds)",
+                "n_permutations": n_permutations,
+                "multiple_comparison_correction": "holm-bonferroni",
+            },
             "params_by_dataset": {
                 ds.name: asdict(params_by_dataset[ds.name]) for ds in datasets
             },

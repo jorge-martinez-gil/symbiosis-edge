@@ -7,8 +7,8 @@ authors:
     given-names: "Jorge"
     affiliation: "Software Competence Center Hagenberg (SCCH)"
     email: "jorge.martinez-gil@scch.at"
-version: "0.2.0"
-date-released: 2026-06-28
+version: "0.3.0"
+date-released: 2026-07-05
 license: MIT
 abstract: "Research software for evaluating cost-aware supervision routing under concept drift with edge models, LLM oracles, and human experts."
 keywords:

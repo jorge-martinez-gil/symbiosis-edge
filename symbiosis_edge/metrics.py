@@ -21,6 +21,7 @@ import pandas as pd
 
 from .params import Schema
 from .simulation import METHODS
+from .stats import mean_ci_t, t_critical
 
 __all__ = [
     "CostModel",
@@ -30,6 +31,7 @@ __all__ = [
     "classification_metrics",
     "post_drift_summary",
     "mean_ci",
+    "per_seed_summary",
     "summarize_runs",
 ]
 
@@ -252,6 +254,7 @@ def post_drift_summary(
             rows.append(row)
 
     out = pd.DataFrame(rows)
+
     # AGUC relative to Static accuracy within each dataset.
     aguc_vals: List[float] = []
     for _, r in out.iterrows():
@@ -267,9 +270,11 @@ def post_drift_summary(
 # --------------------------------------------------------------------------- #
 
 def mean_ci(mat: np.ndarray, ci: float = 0.95) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Column-wise mean and normal-approx CI band for a ``(runs, T)`` matrix.
+    """Column-wise mean and Student-t CI band for a ``(runs, T)`` matrix.
 
-    Returns ``(mean, lo, hi)`` each of length ``T``.
+    Returns ``(mean, lo, hi)`` each of length ``T``. The t-interval is
+    calibrated for the small run counts typical here (a z-band is ~40% too
+    narrow at 5 runs).
     """
     mat = np.asarray(mat, dtype=float)
     mean = np.nanmean(mat, axis=0)
@@ -278,9 +283,40 @@ def mean_ci(mat: np.ndarray, ci: float = 0.95) -> Tuple[np.ndarray, np.ndarray, 
         return mean, mean.copy(), mean.copy()
     sd = np.nanstd(mat, axis=0, ddof=1)
     se = sd / np.sqrt(n)
-    z = {0.90: 1.6448536, 0.95: 1.9599640, 0.99: 2.5758293}.get(round(ci, 2), 1.9599640)
-    half = z * se
+    half = t_critical(n - 1, ci) * se
     return mean, mean - half, mean + half
+
+
+def per_seed_summary(
+    df: pd.DataFrame,
+    *,
+    drift_t: Optional[int],
+    schema: Schema = Schema(),
+    cost: CostModel = CostModel(),
+    k: Optional[int] = None,
+) -> pd.DataFrame:
+    """One row per ``(dataset, method, seed)`` over the post-drift segment.
+
+    The unaggregated companion to :func:`post_drift_summary`: identical
+    columns plus ``seed``. This is the input expected by
+    :func:`symbiosis_edge.stats.compare_methods` (paired significance tests)
+    and by :func:`summarize_runs`.
+    """
+    if "seed" not in df.columns:
+        raise ValueError("per_seed_summary requires a 'seed' column (multi-seed run).")
+
+    d = df.copy()
+    d[schema.t] = d[schema.t].astype(int)
+    d = _post_drift(d, t_col=schema.t, drift_t=drift_t)
+
+    frames: List[pd.DataFrame] = []
+    for seed, dd in d.groupby("seed"):
+        s = post_drift_summary(
+            dd.drop(columns=["seed"]), drift_t=None, schema=schema, cost=cost, k=k
+        )
+        s["seed"] = int(seed)
+        frames.append(s)
+    return pd.concat(frames, ignore_index=True)
 
 
 def summarize_runs(
@@ -292,42 +328,24 @@ def summarize_runs(
     k: Optional[int] = None,
     ci: float = 0.95,
 ) -> pd.DataFrame:
-    """Per-``(dataset, method)`` mean and CI half-width across seeds.
+    """Per-``(dataset, method)`` mean and Student-t CI half-width across seeds.
 
     Requires a ``seed`` column. Reports mean/CI for accuracy, total cost and
     AGUC -- the headline quantities -- as ``*_mean`` / ``*_ci`` pairs.
+
+    .. note::
+       Since v0.3 the interval uses the Student-t critical value (correct for
+       few seeds) instead of the normal z approximation, so CIs are slightly
+       wider than in earlier versions -- and honestly so.
     """
-    if "seed" not in df.columns:
-        raise ValueError("summarize_runs requires a 'seed' column (multi-seed run).")
+    allruns = per_seed_summary(df, drift_t=drift_t, schema=schema, cost=cost, k=k)
 
-    d = df.copy()
-    d[schema.t] = d[schema.t].astype(int)
-    d = _post_drift(d, t_col=schema.t, drift_t=drift_t)
-
-    per_seed_frames: List[pd.DataFrame] = []
-    for seed, dd in d.groupby("seed"):
-        s = post_drift_summary(
-            dd.drop(columns=["seed"]), drift_t=None, schema=schema, cost=cost, k=k
-        )
-        s["seed"] = seed
-        per_seed_frames.append(s)
-    allruns = pd.concat(per_seed_frames, ignore_index=True)
-
-    z = {0.90: 1.6448536, 0.95: 1.9599640, 0.99: 2.5758293}.get(round(ci, 2), 1.9599640)
     out_rows: List[Dict[str, float]] = []
     for (dataset, method), g in allruns.groupby(["dataset", "method"]):
         row: Dict[str, float] = {"dataset": dataset, "method": method, "n_seeds": int(len(g))}
         for col in ["accuracy", "macro_f1", "mcc", "total_cost", "aguc", "n_queries"]:
-            vals = g[col].to_numpy(dtype=float)
-            finite = vals[np.isfinite(vals)]
-            if finite.size == 0:
-                row[f"{col}_mean"] = float("nan")
-                row[f"{col}_ci"] = float("nan")
-            elif finite.size == 1:
-                row[f"{col}_mean"] = float(finite[0])
-                row[f"{col}_ci"] = 0.0
-            else:
-                row[f"{col}_mean"] = float(finite.mean())
-                row[f"{col}_ci"] = float(z * finite.std(ddof=1) / np.sqrt(finite.size))
+            m, hw = mean_ci_t(g[col].to_numpy(dtype=float), ci)
+            row[f"{col}_mean"] = m
+            row[f"{col}_ci"] = hw
         out_rows.append(row)
     return pd.DataFrame(out_rows).reset_index(drop=True)

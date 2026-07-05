@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "symbiosis-edge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cost-aware supervision routing under concept drift: a reproducible simulation benchmark for edge models, LLM oracles, and human experts."
 readme = "README.md"
 requires-python = ">=3.9"

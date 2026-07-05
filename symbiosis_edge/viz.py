@@ -21,13 +21,16 @@ import pandas as pd  # noqa: E402
 from .metrics import CostModel  # noqa: E402
 from .params import Schema  # noqa: E402
 from .simulation import METHODS  # noqa: E402
+from .stats import pareto_frontier, t_critical  # noqa: E402
 
 __all__ = [
     "set_paper_style",
     "save_fig",
     "plot_accuracy_over_time",
     "plot_cost_vs_accuracy",
+    "plot_pareto_frontier",
     "latex_cost_table",
+    "latex_significance_table",
     "summary_to_csv",
 ]
 
@@ -118,7 +121,8 @@ def plot_accuracy_over_time(
             ax.plot(t_axis, mean, label=method, color=METHOD_COLORS.get(method))
             if mat.shape[0] > 1:
                 se = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
-                ax.fill_between(t_axis, mean - 1.96 * se, mean + 1.96 * se,
+                tcrit = t_critical(mat.shape[0] - 1, 0.95)
+                ax.fill_between(t_axis, mean - tcrit * se, mean + tcrit * se,
                                 alpha=0.16, linewidth=0, color=METHOD_COLORS.get(method))
         else:
             g = dm.sort_values(schema.t)
@@ -168,8 +172,81 @@ def plot_cost_vs_accuracy(
     return fig
 
 
+def plot_pareto_frontier(
+    ci_summary: pd.DataFrame,
+    *,
+    dataset: Optional[str] = None,
+    title: str = "",
+    out_base: Optional[Path] = None,
+) -> plt.Figure:
+    """Cost-accuracy Pareto frontier with across-seed 95% CI error bars.
+
+    Expects the output of :func:`symbiosis_edge.metrics.summarize_runs`
+    (``*_mean`` / ``*_ci`` columns). Pareto-optimal methods (minimal cost,
+    maximal accuracy) are joined by a step line; dominated methods are hollow.
+    """
+    d = ci_summary if dataset is None else ci_summary[ci_summary["dataset"] == dataset]
+    if d.empty:
+        raise ValueError(f"No CI-summary rows for dataset '{dataset}'")
+    d = d.reset_index(drop=True)
+
+    costs = d["total_cost_mean"].to_numpy(dtype=float)
+    accs = d["accuracy_mean"].to_numpy(dtype=float)
+    on_front = pareto_frontier(costs, accs)
+
+    fig, ax = plt.subplots(figsize=(5.6, 3.6))
+
+    front = d[on_front].sort_values("total_cost_mean")
+    ax.step(front["total_cost_mean"], front["accuracy_mean"], where="post",
+            color="#2E7D32", alpha=0.45, linewidth=1.4, zorder=2,
+            label="Pareto frontier")
+
+    for i, r in d.iterrows():
+        color = METHOD_COLORS.get(str(r["method"]), "#333")
+        filled = bool(on_front[i])
+        ax.errorbar(
+            r["total_cost_mean"], r["accuracy_mean"],
+            xerr=r.get("total_cost_ci", 0.0), yerr=r.get("accuracy_ci", 0.0),
+            fmt="o", ms=8, color=color, ecolor=color, elinewidth=1.1,
+            capsize=2.5, zorder=3,
+            markerfacecolor=color if filled else "white",
+            markeredgecolor=color, markeredgewidth=1.4,
+        )
+        ax.annotate(str(r["method"]),
+                    xy=(r["total_cost_mean"], r["accuracy_mean"]),
+                    xytext=(6, 5), textcoords="offset points", fontsize=7)
+
+    ax.set_title(title or "Cost-accuracy Pareto frontier (post-drift)")
+    ax.set_xlabel("Total supervision cost (mean $\\pm$ 95% CI)")
+    ax.set_ylabel("Accuracy (mean $\\pm$ 95% CI)")
+    ax.legend(frameon=False, loc="lower right")
+    if out_base is not None:
+        save_fig(fig, out_base)
+    return fig
+
+
 def _fmt_int(x: float) -> str:
     return str(int(round(float(x))))
+
+
+def _fmt_p(p: float) -> str:
+    if not np.isfinite(p):
+        return "--"
+    if p < 0.001:
+        return "$<$0.001"
+    return f"{p:.3f}"
+
+
+def _stars(p: float) -> str:
+    if not np.isfinite(p):
+        return ""
+    if p < 0.001:
+        return r"$^{***}$"
+    if p < 0.01:
+        return r"$^{**}$"
+    if p < 0.05:
+        return r"$^{*}$"
+    return ""
 
 
 def latex_cost_table(
@@ -217,6 +294,62 @@ def latex_cost_table(
             rf"over Static per unit cost. Numbers are means across seeds.}}"
         ),
         rf"\label{{tab:cost_{dataset.lower()}}}",
+        r"\end{table}",
+    ]
+    return "\n".join(lines)
+
+
+def latex_significance_table(
+    comparisons: pd.DataFrame,
+    *,
+    dataset: str,
+    metric: str = "accuracy",
+) -> str:
+    """Render a LaTeX significance table for one (dataset, metric).
+
+    Expects the output of :func:`symbiosis_edge.stats.compare_methods`.
+    Reports the paired mean difference with its 95% CI, the Holm-adjusted
+    permutation-test p-value (starred), and both effect sizes.
+    """
+    d = comparisons[
+        (comparisons["dataset"] == dataset) & (comparisons["metric"] == metric)
+    ]
+    if d.empty:
+        raise ValueError(f"No comparison rows for dataset '{dataset}', metric '{metric}'")
+    target = str(d["target"].iloc[0])
+
+    lines = [
+        r"\begin{table}[t]",
+        r"\centering",
+        r"\small",
+        r"\begin{tabular}{lrrrr}",
+        r"\toprule",
+        r"Baseline & $\Delta$ " + metric.replace("_", r"\_")
+        + r" [95\% CI] & $p$ (Holm) & Cohen's $d_z$ & Cliff's $\delta$ \\",
+        r"\midrule",
+    ]
+    for _, r in d.iterrows():
+        dz = float(r["cohens_dz"])
+        dz_s = "--" if not np.isfinite(dz) else f"{dz:.2f}"
+        lines.append(
+            f"{r['baseline']} & "
+            f"{float(r['diff_mean']):+.4f} $\\pm$ {float(r['diff_ci']):.4f} & "
+            f"{_fmt_p(float(r['p_holm']))}{_stars(float(r['p_holm']))} & "
+            f"{dz_s} & "
+            f"{float(r['cliffs_delta']):+.2f} \\\\"
+        )
+    n_pairs = int(d["n_pairs"].iloc[0])
+    lines += [
+        r"\bottomrule",
+        r"\end{tabular}",
+        (
+            rf"\caption{{Paired comparison of {target} against each baseline on "
+            rf"{dataset} ({metric.replace('_', ' ')}, post-drift, $n={n_pairs}$ "
+            rf"seeds). $p$-values from an exact paired sign-flip permutation "
+            rf"test, Holm-adjusted; $^{{*}}p<.05$, $^{{**}}p<.01$, "
+            rf"$^{{***}}p<.001$.}}"
+        ),
+        rf"\label{{tab:sig_{dataset.lower()}_{metric}}}",
         r"\end{table}",
     ]
     return "\n".join(lines)
