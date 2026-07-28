@@ -274,7 +274,7 @@ docs/                methodology, experiment guide, and extension guide
 @inproceedings{martinezgil2026drift,
   author    = {Jorge Martinez-Gil and Florian Bachinger and Rudolf Ramler and
                Francois Picard and Le{\"i}la Belmerhnia and Georgios Spathoulas},
-  title     = {Drift Adaptation as Supervision Routing under Heterogeneous Costs},
+  title     = {Drift Adaptation as Supervision Routing Under Heterogeneous Costs},
   booktitle = {DEXA 2026},
   pages     = {49--63},
   year      = {2026},
