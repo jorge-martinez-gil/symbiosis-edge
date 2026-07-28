@@ -1,41 +1,99 @@
-# Symbiosis-Edge
+<h1 align="center">Symbiosis-Edge</h1>
 
-**Cost-aware supervision routing under concept drift, a reproducible benchmark for edge models, LLM oracles, and human experts.**
+<p align="center">
+  <strong>Drift adaptation as supervision routing under heterogeneous costs</strong>
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg)](https://www.python.org/)
-[![CI](https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml/badge.svg)](https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml)
-[![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)](tests/)
-[![Reproducible](https://img.shields.io/badge/experiments-reproducible-2E7D32.svg)](docs/experiments.md)
-[![Citation Metadata](https://img.shields.io/badge/citation-CFF-8A2BE2.svg)](CITATION.cff)
+<p align="center">
+  Jorge Martinez-Gil · Florian Bachinger · Rudolf Ramler · Francois Picard · Leïla Belmerhnia · Georgios Spathoulas
+</p>
 
-Symbiosis-Edge studies a simple question with practical consequences for **streaming machine learning**, **online learning**, and **Edge AI**:
+<p align="center">
+  DEXA 2026 · Reference implementation and reproducibility package
+</p>
 
-> When an edge model becomes uncertain under **concept drift**, should the system trust the edge model, ask an **LLM oracle**, or spend scarce **human-expert** attention?
+<p align="center">
+  <a href="https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml"><img src="https://github.com/jorge-martinez-gil/symbiosis-edge/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB.svg" alt="Python 3.9 or newer"></a>
+  <a href="docs/experiments.md"><img src="https://img.shields.io/badge/experiments-reproducible-2E7D32.svg" alt="Reproducible experiments"></a>
+  <a href="CITATION.cff"><img src="https://img.shields.io/badge/citation-CFF-8A2BE2.svg" alt="Citation metadata"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555.svg" alt="MIT license"></a>
+</p>
 
-It provides a tested Python package, a one-command benchmark runner, baselines, ablations, and LLM-backed oracle variants for evaluating **supervision routing under cost, latency, and budget constraints**.
+## Abstract
 
-## What problem does this solve?
+Symbiosis-Edge studies online classification under concept drift when supervision can be obtained from heterogeneous sources. At each stream step, a routing policy chooses among local edge inference, a machine oracle, and a human expert. These alternatives differ in cost, reliability, and availability. The benchmark evaluates whether uncertainty-based, budget-aware routing can improve post-drift predictive performance while reducing supervision cost.
 
-Most drift-handling pipelines treat supervision as a binary choice: query or do not query. Symbiosis-Edge reframes it as an **allocation problem** across three agents with very different costs and strengths:
+The repository contains the simulation model used in the accompanying DEXA 2026 paper, baseline policies, statistical analysis, figure and table generation, optional LLM-provider integrations, and a command-line interface for reproducing the reported experiments.
 
-| Agent | Cost | Strength | Role |
-| --- | --- | --- | --- |
-| Edge model | ~0 | Fast local inference | Handles routine predictions |
-| LLM oracle | Moderate | Broad zero-shot reasoning | Resolves ambiguous cases, gives explanations |
-| Human expert | High | Ground-truth authority | Validates critical or expensive decisions |
+**Research question.** How should an online classifier allocate uncertain instances among edge, machine-oracle, and human-expert tiers when the data distribution changes and supervision is costly?
 
-The policy routes each uncertain instance to the **least costly agent expected to provide enough utility**, while respecting oracle and human supervision budgets. This is why *adaptive supervision* matters: under drift, a fixed query policy either overspends on supervision or fails to recover, whereas budget-aware routing recovers accuracy at a fraction of the cost.
+## Contributions
 
-## How is this different from active learning?
+1. A three-tier formulation of supervision routing under separate oracle and human budgets.
+2. Adaptive routing thresholds based on the recent uncertainty distribution.
+3. A deterministic experimental implementation with baselines, ablations, and configurable cost assumptions.
+4. A reproducibility pipeline that generates raw runs, summary statistics, hypothesis tests, figures, LaTeX tables, and a checksum manifest.
 
-Classical active learning asks *which* instances to label from a single annotator with a single cost. Symbiosis-Edge generalises this along three axes that matter in deployed **human-in-the-loop** and **Industry 5.0** systems: (1) **multiple annotators** with heterogeneous cost and reliability (edge / oracle / human), (2) an explicit **supervision budget** per tier, and (3) an **online, drift-aware** setting where the uncertainty distribution itself shifts over time. The benchmark reports not just accuracy but the full **cost–quality trade-off**.
+## Experimental scope
 
-## Reproducible simulation — what this is (and isn't)
+> The bundled experiments are a **controlled parametric simulation** of routing dynamics. They do not train classifiers on the raw SECOM or APS datasets. `SYNTHETIC`, `SECOM`, and `APS` identify parameter presets inherited from the accompanying study; no external dataset is loaded by the simulation path.
 
-> The bundled experiments are a **controlled parametric simulation** of the routing problem, not the training of real classifiers on raw data. Dataset names (`SYNTHETIC`, `SECOM`, `APS`) select **parameter presets**; no external data is loaded in the simulation path. This keeps the routing dynamics transparent and fully deterministic. Every number is regenerated by `symbiosis-edge run` and accompanied by a `manifest.json` (versions, seeds, parameters, checksums). Wiring in real streaming datasets and online learners is on the roadmap, see [`docs/methodology.md`](docs/methodology.md) and [`docs/extending.md`](docs/extending.md).
+Each method maintains a scalar accuracy state that evolves before and after a configured drift point. Queried annotations modify this state according to the assumed annotator reliability and learning rate. This design isolates the supervision-routing mechanism and makes runs deterministic, but it should not be interpreted as an empirical evaluation of trained models on the named raw datasets.
 
-## Install
+The exact update order, assumptions, and limitations are documented in [docs/methodology.md](docs/methodology.md). Support for real streaming datasets and online learners is discussed in [docs/extending.md](docs/extending.md).
+
+## Method
+
+<p align="center">
+  <img src="docs/assets/routing_architecture.svg" width="100%" alt="Formal overview of the Symbiosis-Edge supervision-routing method">
+</p>
+
+<p align="center"><em>Figure 1. Online routing from predictive uncertainty to edge, oracle, or human supervision.</em></p>
+
+Let `p_t` denote the edge model's predictive probability vector at stream step `t`. Uncertainty combines Shannon entropy with the top-two probability margin:
+
+```text
+u_t = H(p_t) + α [1 − margin(p_t)]
+```
+
+For a sliding window `D_W` of recent uncertainty scores, the human and oracle thresholds are
+
+```text
+τ_human  = Quantile_{1 − B_H}(D_W)
+τ_oracle = Quantile_{1 − (B_H + B_O)}(D_W),
+```
+
+where `B_H` and `B_O` are the human and oracle supervision budgets. The action is
+
+```text
+human,  if u_t > τ_human
+oracle, if τ_oracle < u_t ≤ τ_human
+edge,   otherwise.
+```
+
+### Compared policies
+
+| Method | Supervision | Policy |
+|:---|:---|:---|
+| **Static** | None | Never requests supervision. |
+| **SAL** | Single tier | Queries when uncertainty exceeds a budget-derived threshold. |
+| **ADWIN-SAL** | Single tier | Temporarily increases the query budget after an ADWIN-style change alarm. |
+| **Symbiosis-Edge** | Oracle and human | Uses nested thresholds to allocate the most uncertain instances to the human tier and the remainder of the query budget to the oracle tier. |
+
+### Cost model
+
+The default per-event costs are zero for edge inference, one for an oracle query, and ten for a human annotation. All values are configurable. Accuracy Gain per Unit Cost is computed on the post-drift segment:
+
+```text
+AGUC = (accuracy_method − accuracy_static) / total_cost.
+```
+
+See [docs/methodology.md](docs/methodology.md) for the complete formal specification.
+
+## Reproducing the experiments
+
+### Installation
 
 ```bash
 git clone https://github.com/jorge-martinez-gil/symbiosis-edge
@@ -43,105 +101,125 @@ cd symbiosis-edge
 pip install -e .
 ```
 
-## Quick start
+### Full benchmark
 
 ```bash
-# See methods, presets, and metrics
-symbiosis-edge info
-
-# Reproduce the full benchmark (figures + LaTeX tables + manifest) -> results/
 symbiosis-edge run --seeds 5 --out results
+```
 
-# A fast smoke run
+For a short validation run:
+
+```bash
 symbiosis-edge run --quick --out /tmp/se-smoke
 ```
 
-Or use the library directly:
+The full command produces:
 
-```python
-from symbiosis_edge import SimParams, simulate_one_run, post_drift_summary
+| Artifact | Description |
+|:---|:---|
+| `summary.csv` | Mean post-drift metrics by preset and method |
+| `summary_ci.csv` | Means and Student-t confidence intervals |
+| `significance.csv` | Paired permutation tests, adjusted p-values, and effect sizes |
+| `raw_runs.csv.gz` | Per-step records for every preset, method, and seed |
+| `figures/` | Accuracy trajectories, cost–accuracy plots, and Pareto frontiers |
+| `tables/` | LaTeX cost and significance tables |
+| `manifest.json` | Environment, commit, parameters, seeds, statistical settings, and SHA-256 checksums |
 
-df = simulate_one_run(dataset="SYNTHETIC", seed=0, params=SimParams())
-print(post_drift_summary(df, drift_t=500))
+Useful options include:
+
+```bash
+symbiosis-edge run \
+  --datasets SECOM APS \
+  --seeds 10 \
+  --cost-oracle 2 \
+  --cost-human 20 \
+  --ci 0.99 \
+  --out results
 ```
 
-## Results snapshot
+## Results
 
 <p align="center">
   <img src="docs/assets/preview_accuracy.png" width="49%" alt="Rolling accuracy under concept drift for each routing method">
-  <img src="docs/assets/preview_cost.png" width="49%" alt="Post-drift cost versus accuracy trade-off per method">
+  <img src="docs/assets/preview_cost.png" width="49%" alt="Post-drift supervision cost versus mean accuracy">
 </p>
 
-Post-drift means across 5 seeds, reproduced with `symbiosis-edge run --seeds 5`:
+<p align="center"><em>Figure 2. Accuracy dynamics and the post-drift cost–accuracy relationship for the SYNTHETIC preset.</em></p>
 
-| Dataset | Method | Total cost | Mean acc. | Macro-F1 |
-| --- | --- | ---: | ---: | ---: |
-| SYNTHETIC | SAL | 2640 | 0.888 | 0.888 |
-| SYNTHETIC | ADWIN-SAL | 2824 | 0.916 | 0.916 |
-| SYNTHETIC | **Symbiosis-Edge** | **1252** | **0.929** | **0.929** |
-| SECOM | SAL | 3126 | 0.876 | 0.875 |
-| SECOM | ADWIN-SAL | 2904 | 0.908 | 0.908 |
-| SECOM | **Symbiosis-Edge** | **1348** | **0.950** | **0.950** |
-| APS | SAL | 2888 | 0.867 | 0.867 |
-| APS | ADWIN-SAL | 2916 | 0.902 | 0.902 |
-| APS | **Symbiosis-Edge** | **1310** | **0.941** | **0.941** |
+Post-drift means across five seeds are shown below.
 
-Across all three presets, Symbiosis-Edge reaches the **highest accuracy at 50–57% lower supervision cost** than the single-oracle baselines, giving roughly **2–3x higher accuracy gain per unit cost (AGUC)**. AGUC is defined per the post-drift segment as
+| Preset | Method | Total cost | Accuracy | Macro-F1 |
+|:---|:---|---:|---:|---:|
+| SYNTHETIC | SAL | 2,640 | 0.888 | 0.888 |
+|  | ADWIN-SAL | 2,824 | 0.916 | 0.916 |
+|  | **Symbiosis-Edge** | **1,252** | **0.929** | **0.929** |
+| SECOM | SAL | 3,126 | 0.876 | 0.875 |
+|  | ADWIN-SAL | 2,904 | 0.908 | 0.908 |
+|  | **Symbiosis-Edge** | **1,348** | **0.950** | **0.950** |
+| APS | SAL | 2,888 | 0.867 | 0.867 |
+|  | ADWIN-SAL | 2,916 | 0.902 | 0.902 |
+|  | **Symbiosis-Edge** | **1,310** | **0.941** | **0.941** |
 
-```text
-AGUC = (Accuracy_method - Accuracy_static) / TotalCost
+Within the bundled simulation, Symbiosis-Edge obtains the highest mean accuracy on all three presets while using 50–57% less supervision cost than the single-tier baselines. The corresponding AGUC is approximately two to three times higher. These statements apply to the parametric presets described above.
+
+## Statistical analysis
+
+Multi-seed experiments report:
+
+- Student-t confidence intervals;
+- paired sign-flip permutation tests against each baseline;
+- Holm–Bonferroni-adjusted p-values;
+- paired Cohen's `d_z` and Cliff's delta effect sizes; and
+- cost–accuracy Pareto frontiers with confidence-interval error bars.
+
+For five paired seeds, the smallest attainable two-sided exact permutation p-value is `2/2^5 = 0.0625`. At least ten seeds are therefore required for conventional significance claims. With ten seeds, the bundled simulation reports Holm-adjusted `p < 0.01` for the accuracy comparison with each baseline.
+
+The statistical procedure and seed-count rationale are described in [docs/experiments.md](docs/experiments.md#statistical-methodology).
+
+## Python interface
+
+```python
+from symbiosis_edge import SimParams, post_drift_summary, simulate_one_run
+
+params = SimParams()
+run = simulate_one_run(dataset="SYNTHETIC", seed=0, params=params)
+summary = post_drift_summary(run, drift_t=params.drift_t)
+
+print(summary)
 ```
 
-The Static baseline (no supervision) collapses post-drift; full per-method tables (including MCC, Cohen's kappa, balanced accuracy, query counts, and confidence intervals) are written to `results/` and `results/summary_ci.csv`.
+The cost model can be changed through CLI options or by passing a `CostModel` to `run_experiment`. New simulation presets can be constructed from `SimParams`.
 
-### Statistical rigor
+## LLM-oracle variants
 
-Every multi-seed run is evaluated with small-sample-honest statistics — no bare means. `symbiosis-edge run` reports **Student-t confidence intervals** (calibrated for few seeds, unlike a z-approximation), **exact paired sign-flip permutation tests** against every baseline with **Holm–Bonferroni correction**, effect sizes (**Cohen's d_z**, **Cliff's delta**), and a **cost–accuracy Pareto frontier** figure with CI error bars. At 10 seeds, Symbiosis-Edge's accuracy advantage over each baseline is significant at Holm-adjusted p < 0.01 with large effect sizes. Results land in `significance.csv`, `tables/table_significance_*.tex`, and `figures/pareto_*`; the statistical settings are recorded in `manifest.json`. See [`docs/experiments.md`](docs/experiments.md#statistical-methodology) for the methodology, including why ≥10 seeds are needed for significance claims.
+The scripts in [`scripts/`](scripts/) provide optional request and JSON-label contracts for Chatbase, Groq Llama 3, and Mistral. They require the `llm` extra and provider credentials:
 
-## How it works
-
-Uncertainty comes from edge-model entropy plus a top-two margin term:
-
-```text
-u(x) = H(p) + alpha * (1 - margin(p))
+```bash
+pip install -e ".[llm]"
 ```
 
-Budget-aware thresholds are sliding-window quantiles, so the realised query rate tracks the budget even as the uncertainty distribution drifts:
+Configuration variables are listed in [`.env.example`](.env.example). These integrations are experimental and currently use placeholder item representations; they are not the source of the offline results reported above. See [docs/experiments.md](docs/experiments.md#llm-oracle-experiments-optional).
+
+## Repository structure
 
 ```text
-tau_human  = Quantile_{1 - B_H}(D_W)
-tau_oracle = Quantile_{1 - (B_H + B_O)}(D_W)
+symbiosis_edge/      simulation, routing, uncertainty, drift, metrics,
+                     statistics, visualization, reporting, and CLI
+tests/               determinism, routing, drift, metrics, statistics, and CLI
+scripts/             offline wrappers and optional LLM-provider variants
+scripts/_legacy/     original monolithic experiment scripts
+docs/                methodology, experiment guide, and extension guide
 ```
 
-Symbiosis-Edge routes `u > tau_human` to the human, `tau_oracle < u <= tau_human` to the oracle, and keeps the rest on the edge. Baselines: **Static** (never query), **SAL** (one oracle threshold), **ADWIN-SAL** (drift-aware budget via an ADWIN detector). See [`docs/methodology.md`](docs/methodology.md) for the exact model.
-
-## How do I ...
-
-**... reproduce the experiments?** `pip install -e . && symbiosis-edge run --seeds 5 --out results`. Every output carries a `manifest.json` for traceability.
-
-**... benchmark a new routing algorithm?** Reuse the shared uncertainty score and budget thresholds, add your method to `simulation.METHODS`, and add a determinism + budget test. A worked example and the planned policy plug-in API are in [`docs/extending.md`](docs/extending.md).
-
-**... integrate my own oracle?** The supervision step is parameterised by an annotator accuracy and learning rate (`oracle_acc`, `lr_oracle`). For live LLM oracles, the provider scripts in `scripts/` (Chatbase, Groq Llama 3, Mistral) show the request/JSON-label contract; install with `pip install -e ".[llm]"` and set credentials from `.env.example`.
-
-**... simulate annotation costs?** Pass `--cost-oracle`, `--cost-human`, and `--cost-edge` to the CLI, or a `CostModel(...)` to `run_experiment(...)`. All cost and AGUC numbers update accordingly.
-
-**... contribute?** See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the issue/PR templates. Benchmark-result submissions should include the run's `manifest.json`.
-
-## Repository layout
-
-```text
-symbiosis_edge/      installable, tested library (uncertainty, routing, drift,
-                     simulation, metrics, datasets, viz, report, cli)
-tests/               pytest suite (determinism, routing, ADWIN, metrics, CLI)
-scripts/             thin wrappers + LLM-oracle variants
-scripts/_legacy/     original monolithic scripts, kept for reference
-docs/                methodology.md, extending.md, experiments.md
-.github/workflows/   CI (lint + tests across Python 3.9-3.12)
-```
+| Document | Purpose |
+|:---|:---|
+| [Methodology](docs/methodology.md) | Formal simulation model and limitations |
+| [Experiment guide](docs/experiments.md) | Reproduction procedure and statistical methodology |
+| [Extension guide](docs/extending.md) | Adding presets, policies, and future real-data support |
+| [Contributing](CONTRIBUTING.md) | Development and benchmark-submission requirements |
+| [Citation metadata](CITATION.cff) | Machine-readable software and paper citation |
 
 ## Citation
-
-If Symbiosis-Edge supports your research, please cite the accompanying paper:
 
 ```bibtex
 @inproceedings{martinezgil2026drift,
@@ -155,12 +233,9 @@ If Symbiosis-Edge supports your research, please cite the accompanying paper:
 }
 ```
 
+## License and contact
 
-## License
+The software is distributed under the [MIT License](LICENSE).
 
-MIT — see [`LICENSE`](LICENSE).
-
-## Contact
-
-Questions or collaboration: [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at) ·
-Software Competence Center Hagenberg (SCCH), Softwarepark 32a, 4232 Hagenberg, Austria.
+Contact: [jorge.martinez-gil@scch.at](mailto:jorge.martinez-gil@scch.at)<br>
+Software Competence Center Hagenberg, Softwarepark 32a, 4232 Hagenberg, Austria.
