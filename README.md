@@ -1,7 +1,7 @@
 <h1 align="center">Symbiosis-Edge</h1>
 
 <p align="center">
-  <strong>Drift adaptation as supervision routing under heterogeneous costs</strong>
+  <strong>Drift Adaptation as Supervision Routing Under Heterogeneous Costs</strong>
 </p>
 
 <p align="center">
