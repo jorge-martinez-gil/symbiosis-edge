@@ -276,7 +276,7 @@ docs/                methodology, experiment guide, and extension guide
                Francois Picard and Le{\"i}la Belmerhnia and Georgios Spathoulas},
   title     = {Drift Adaptation as Supervision Routing Under Heterogeneous Costs},
   booktitle = {DEXA 2026},
-  pages     = {49--63},
+  pages     = {57--71},
   year      = {2026},
   publisher = {Springer}
 }
